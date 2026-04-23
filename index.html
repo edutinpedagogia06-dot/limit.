@@ -1,0 +1,2760 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIMIT</title>
+
+    <!-- Favicon -->
+    <link rel="icon"             type="image/png" href="logo-limit.png">
+    <link rel="apple-touch-icon"                  href="logo-limit.png">
+    <meta name="theme-color"     content="#00808a">
+
+    <!-- ① Supabase v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- ② Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ③ Fira Code -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --limit-teal: #00808a; --limit-blue: #0a2540; --limit-gray: #f4f7f9; }
+
+        /* ── SCROLL LIMPIO ────────────────────────────────────────────
+           overflow:hidden en html/body destruye position:fixed en Chrome.
+           Usamos scrollbar-gutter:stable para reservar el espacio de la
+           barra sin mostrar una segunda barra vacía.
+           overflow-x:hidden elimina el scroll lateral accidental.      */
+        html {
+            overflow-x: hidden;
+            scrollbar-gutter: stable;
+        }
+        body {
+            overflow-x: hidden;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--limit-gray);
+            font-family: 'Inter', system-ui, sans-serif;
+            color: #0a2540;
+            transition: background 0.3s ease;
+        }
+
+        /* ── #app-root: div semántico sin propiedades de layout ───── */
+        #app-root { /* sin overflow, sin height — no bloquea position:fixed */ }
+
+        /* ── Botones de formato (Negrita, Alineación) ── */
+        .fmt-btn {
+            width: 30px; height: 30px; border-radius: 50%;
+            background: white; border: 1.5px solid #e2e8f0;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.18s; flex-shrink: 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            font-size: 13px; font-weight: 900; color: #0a2540;
+            font-family: system-ui, sans-serif; padding: 0;
+        }
+        .fmt-btn:hover   { border-color: #00808a; box-shadow: 0 2px 8px rgba(0,128,138,0.2); transform: scale(1.1); }
+        .fmt-btn.active  { background: #00808a; border-color: #00808a; color: white; }
+        .fmt-btn svg     { width: 13px; height: 13px; pointer-events: none; }
+        .fmt-group       { display: flex; align-items: center; gap: 4px; padding-left: 10px; border-left: 1px solid #e2e8f0; flex-shrink: 0; }
+
+        /* Menú tipo-nota: cuadrícula 2×2 responsiva */
+        #type-menu-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .type-card       { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 24px; padding: 20px 16px; cursor: pointer; transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1); min-width: 120px; }
+        .type-card:hover { border-color: #00808a; background: #f0fdfc; transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,128,138,0.15); }
+        .type-card-icon  { width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; }
+        .type-card span  { font-size: 10px; font-weight: 800; color: #00808a; text-transform: uppercase; letter-spacing: .1em; }
+        .type-card.disabled { opacity: 0.5; cursor: default; }
+        .type-card.disabled:hover { transform: none; box-shadow: none; border-color: #e2e8f0; background: #f8fafc; }
+        .type-card.disabled span { color: #94a3b8; }
+
+        /* Panel interior del menú */
+        #type-menu-panel {
+            background: white; backdrop-filter: blur(10px);
+            border-radius: 28px; padding: 28px 24px;
+            box-shadow: 0 32px 80px rgba(10,37,64,0.2);
+            width: 90vw; max-width: 500px;
+        }
+
+        /* ── Selector de color de letra ── */
+        .txt-color-wrap {
+            display: flex; align-items: center;
+            border-left: 1px solid #e2e8f0; padding-left: 10px; flex-shrink: 0;
+        }
+        .txt-color-btn {
+            position: relative; width: 30px; height: 30px; border-radius: 50%;
+            background: white; border: 1.5px solid #e2e8f0;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.18s; flex-shrink: 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .txt-color-btn:hover { border-color: #00808a; box-shadow: 0 2px 8px rgba(0,128,138,0.2); transform: scale(1.1); }
+        .txt-color-btn svg { width: 14px; height: 14px; pointer-events: none; }
+        .txt-color-btn input[type="color"] {
+            position: absolute; inset: 0; opacity: 0;
+            width: 100%; height: 100%; cursor: pointer; border: none; padding: 0;
+        }
+        /* Franja de color bajo la A que refleja el color activo */
+        .txt-color-bar {
+            position: absolute; bottom: 4px; left: 6px; right: 6px;
+            height: 3px; border-radius: 2px; background: #0a2540;
+            pointer-events: none; transition: background 0.15s;
+        }
+        * { scrollbar-width: thin; scrollbar-color: rgba(0,128,138,0.22) transparent; }
+        *::-webkit-scrollbar          { width: 5px; height: 5px; }
+        *::-webkit-scrollbar-track    { background: transparent; }
+        *::-webkit-scrollbar-thumb    { background: rgba(0,128,138,0.22); border-radius: 99px; }
+        *::-webkit-scrollbar-thumb:hover { background: rgba(0,128,138,0.5); }
+        *::-webkit-scrollbar-corner   { background: transparent; }
+
+        /* Carpetas */
+        .folder-pill { transition: all 0.3s; cursor: pointer; display: flex; align-items: center; gap: 8px; border: 2px solid transparent; }
+        .folder-pill.active { background-color: var(--limit-teal) !important; color: white !important; box-shadow: 0 10px 20px -5px rgba(0,128,138,0.3); }
+        .delete-folder-btn { padding: 2px; border-radius: 4px; transition: 0.2s; opacity: 0.5; font-size: 10px; }
+        .delete-folder-btn:hover { background: rgba(0,0,0,0.1); opacity: 1; }
+
+        /* Notas */
+        .card-note { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); border-radius: 2.5rem; position: relative; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+        .card-note:hover { transform: translateY(-8px); box-shadow: 0 30px 60px -12px rgba(0,128,138,0.15); }
+        .delete-btn { position: absolute; top: 1.5rem; right: 1.5rem; width: 32px; height: 32px; background: #fee2e2; color: #ef4444; border-radius: 12px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.2s; border: none; cursor: pointer; z-index: 10; }
+        .card-note:hover .delete-btn { opacity: 1; }
+
+        /* Tablas */
+        .excel-table { border-collapse: collapse; width: 100%; background: white; border-radius: 1rem; overflow: hidden; }
+        .excel-table td, .excel-table th { border: 1px solid rgba(0,0,0,0.08); padding: 0; min-width: 130px; position: relative; }
+        .excel-table th { background: rgba(0,0,0,0.03); font-weight: 800; text-transform: uppercase; font-size: 0.7rem; color: #64748b; text-align: left !important; padding: 14px; }
+        .cell-editor { padding: 14px; min-height: 50px; outline: none; width: 100%; height: 100%; text-align: left !important; }
+        .selected-cell { outline: 3px solid var(--limit-teal) !important; outline-offset: -3px; background-color: rgba(0,128,138,0.1) !important; z-index: 20; }
+
+        /* Color dots */
+        .color-dot { width: 22px; height: 22px; border-radius: 7px; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s; flex-shrink: 0; }
+        .color-dot:hover { transform: scale(1.3); z-index: 10; }
+
+        /* Placeholders */
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: inherit; opacity: 0.4; pointer-events: none; display: block; }
+
+        /* Canvas */
+        .paper-sheet-container { background: #0f172a; border-radius: 2rem; width: 100%; max-width: 1100px; margin: 0 auto; min-height: 700px; display: flex; flex-direction: column; overflow: hidden; }
+        .code-textarea { width: 100%; min-height: 650px; background: transparent; color: #10b981; font-family: 'Fira Code', monospace; font-size: 15px; padding: 40px; outline: none; border: none; resize: none; text-align: left !important; }
+
+        /* Card colors */
+        .bg-white { background-color: #ffffff; color: #0a2540; }
+        .bg-yellow-300 { background-color: #fde047; color: #0a2540; }
+        .bg-orange-500 { background-color: #ff6b00; color: white; }
+        .bg-red-500 { background-color: #ef4444; color: white; }
+        .bg-pink-400 { background-color: #f472b6; color: white; }
+        .bg-teal-400 { background-color: #2dd4bf; color: #0a2540; }
+        .bg-lime-400 { background-color: #a3e635; color: #0a2540; }
+        .bg-purple-800 { background-color: #6b21a8; color: white; }
+        .bg-blue-950 { background-color: #0a2540; color: white; }
+        .bg-slate-700 { background-color: #334155; color: white; }
+        .bg-emerald-900 { background-color: #064e3b; color: white; }
+        .bg-amber-900 { background-color: #78350f; color: white; }
+        .dark-text-needed #modal-title, .dark-text-needed #modal-body, .dark-text-needed [contenteditable] { color: white !important; }
+        [contenteditable]:focus { outline: none; }
+
+        /* ── Imagen: contenedor + ajuste de texto ─────────────────────
+           REGLAS CRÍTICAS:
+           1. float solo funciona en elementos block-level (display:block).
+           2. max-width:100% en el wrapper hace que ocupe toda la línea,
+              matando el efecto del float → usar width:fit-content.
+           3. El wrapper debe ser <div> (no <span>) para que float funcione
+              de forma fiable en Chrome con contenteditable.                 */
+        .note-img { max-width: 100%; border-radius: 1.5rem; display: block; margin: 0; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .img-resize-wrapper {
+            display: block; position: relative;
+            width: fit-content; width: -moz-fit-content;  /* ancho = tamaño de la imagen */
+            max-width: 100%;                               /* pero nunca desbordar el padre */
+            margin: 15px 0;
+        }
+        .img-resize-wrapper img { display: block; border-radius: 1.5rem; box-shadow: 0 10px 20px rgba(0,0,0,0.1); max-width: 100%; }
+        .img-resize-wrapper.selected img { outline: 3px solid var(--limit-teal); outline-offset: 2px; }
+        .img-resize-wrapper .resize-handle { display: none; position: absolute; width: 14px; height: 14px; background: var(--limit-teal); border: 2px solid white; border-radius: 4px; z-index: 100; box-shadow: 0 2px 6px rgba(0,128,138,0.5); }
+        .img-resize-wrapper.selected .resize-handle { display: block; }
+        .resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+        .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+        .resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+        .resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+        .img-resize-wrapper .size-label { display: none; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(10,37,64,0.75); color: white; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 8px; pointer-events: none; white-space: nowrap; }
+        .img-resize-wrapper.resizing .size-label { display: block; }
+
+        /* ── Clases de float (margin 15px como especifica el usuario) ── */
+        .img-resize-wrapper.wrap-left  { float: left  !important; display: block !important; width: fit-content !important; margin: 15px 15px 15px 0 !important; shape-outside: margin-box; }
+        .img-resize-wrapper.wrap-right { float: right !important; display: block !important; width: fit-content !important; margin: 15px 0 15px 15px !important; shape-outside: margin-box; }
+        .img-resize-wrapper.wrap-none  { float: none  !important; display: block !important; clear: both; margin: 15px auto !important; }
+        /* Clearfix: cierra el contexto de float */
+        .img-clearfix { clear: both !important; display: block !important; height: 0 !important; line-height: 0 !important; font-size: 0 !important; overflow: hidden !important; }
+
+        /* Barra de controles flotante sobre la imagen seleccionada */
+        .img-ctrl-bar {
+            display: none; position: absolute; top: -44px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10,37,64,0.92); border-radius: 10px;
+            padding: 6px 10px; gap: 4px; align-items: center;
+            z-index: 200; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .img-resize-wrapper.selected .img-ctrl-bar { display: flex; }
+        .img-ctrl-btn {
+            background: rgba(255,255,255,0.12); border: none; border-radius: 6px;
+            color: white; font-size: 10px; font-weight: 700; padding: 4px 9px;
+            cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 4px;
+        }
+        .img-ctrl-btn:hover { background: rgba(255,255,255,0.25); }
+        .img-ctrl-btn.active-wrap { background: #00808a; }
+
+        /* Download spinner */
+        #download-spinner { display: none; position: fixed; inset: 0; background: rgba(10,37,64,0.45); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+        #download-spinner.show { display: flex; }
+        .spinner-ring { width: 52px; height: 52px; border: 4px solid rgba(0,128,138,0.25); border-top-color: #00808a; border-radius: 50%; animation: spin 0.7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── AUTH / PROFILE ─── */
+        #auth-user { display: none; }
+
+        .user-avatar-wrap { position: relative; cursor: pointer; }
+        .user-avatar { width: 40px; height: 40px; border-radius: 14px; object-fit: cover; border: 2.5px solid white; box-shadow: 0 4px 14px rgba(0,128,138,0.28); transition: transform 0.2s; display: block; background: #e2e8f0; }
+        .user-avatar:hover { transform: scale(1.08); }
+        .online-dot { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; background: #00808a; border-radius: 50%; border: 2px solid var(--limit-gray); pointer-events: none; }
+
+        /* Sync indicator */
+        #sync-indicator { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; flex-shrink: 0; transition: background 0.4s; }
+        #sync-indicator.syncing { background: #f59e0b; animation: pulse-dot 1s infinite; }
+        #sync-indicator.synced  { background: #00808a; animation: none; }
+        #sync-indicator.error   { background: #ef4444; animation: none; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+        /* Profile dropdown */
+        #profile-panel {
+            position: absolute; right: 0; top: calc(100% + 12px);
+            width: 268px; background: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 24px 60px -8px rgba(10,37,64,0.2), 0 0 0 1px rgba(0,0,0,0.05);
+            padding: 20px; z-index: 8000;
+            opacity: 0; transform: translateY(-10px) scale(0.96); pointer-events: none;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #profile-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: all; }
+
+        /* Config warning */
+        #config-warn { display: none; background: #fff7ed; border-bottom: 2px solid #fed7aa; padding: 10px 24px; font-size: 11px; font-weight: 700; color: #92400e; text-align: center; letter-spacing: 0.04em; }
+        #config-warn.show { display: block; }
+
+        /* ─── MOBILE ─── */
+        #mobile-bottom-nav, #mobile-fab, #mobile-toolbar-strip,
+        #mobile-panel-folders, #mobile-panel-search, #mobile-panel-settings { display: none; }
+
+        @media (max-width: 767px) {
+            body { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+            * { -webkit-tap-highlight-color: transparent; }
+            body > header { display: none !important; }
+            #notes-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
+            .card-note { border-radius: 2rem !important; }
+            .card-note:active { transform: scale(0.97) !important; transition: transform 0.12s !important; }
+            .delete-btn { opacity: 1 !important; width: 30px !important; height: 30px !important; top: 1rem !important; right: 1rem !important; }
+            button:active, .folder-pill:active, .color-dot:active { transform: scale(0.93) !important; transition: transform 0.1s !important; }
+            #editor-modal { border-radius: 0 !important; }
+            #editor-modal > div:first-child { display: none !important; }
+            #editor-content-area { padding: 24px 20px 120px 20px !important; }
+            #modal-title { font-size: 2.4rem !important; margin-bottom: 1.5rem !important; border-left-width: 6px !important; padding-left: 16px !important; line-height: 1.15 !important; }
+            #modal-body { font-size: 1.05rem !important; line-height: 1.85 !important; }
+            body > button[onclick*="type-menu"] { display: none !important; }
+            #mobile-bottom-nav { display: flex !important; }
+            #mobile-fab { display: flex !important; }
+            #mobile-toolbar-strip { display: flex !important; }
+        }
+
+        #mobile-bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: calc(64px + env(safe-area-inset-bottom,0px)); background: rgba(255,255,255,0.94); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-top: 1px solid rgba(0,0,0,0.08); align-items: flex-start; justify-content: space-around; padding-top: 6px; z-index: 95; box-shadow: 0 -4px 24px rgba(0,0,0,0.07); }
+        .mob-nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 18px; border-radius: 16px; border: none; background: transparent; cursor: pointer; transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1); min-width: 64px; }
+        .mob-nav-btn:active { transform: scale(0.87) !important; }
+        .mob-nav-btn svg { width: 22px; height: 22px; stroke: #94a3b8; transition: stroke 0.2s; }
+        .mob-nav-btn span { font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; transition: color 0.2s; }
+        .mob-nav-btn.mnav-active svg { stroke: #00808a; }
+        .mob-nav-btn.mnav-active span { color: #00808a; }
+        .mob-nav-btn.mnav-active { background: rgba(0,128,138,0.09); }
+
+        #mobile-fab { position: fixed; bottom: calc(72px + env(safe-area-inset-bottom,0px) + 12px); right: 18px; width: 60px; height: 60px; background: #00808a; border-radius: 20px; align-items: center; justify-content: center; box-shadow: 0 10px 28px -4px rgba(0,128,138,0.55),0 4px 10px rgba(0,128,138,0.25); z-index: 85; border: none; cursor: pointer; transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+        #mobile-fab:active { transform: scale(0.86) !important; box-shadow: 0 4px 12px rgba(0,128,138,0.35) !important; }
+
+        #mobile-toolbar-strip { position: fixed; bottom: 0; left: 0; right: 0; z-index: 160; background: rgba(255,255,255,0.97); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid rgba(0,0,0,0.07); padding: 10px 14px; padding-bottom: calc(10px + env(safe-area-inset-bottom,0px)); flex-direction: column; gap: 8px; box-shadow: 0 -4px 20px rgba(0,0,0,0.06); }
+        #mobile-toolbar-strip.strip-hidden { display: none !important; }
+        #mob-strip-row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .mob-strip-btn { display: flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: 12px; border: none; cursor: pointer; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s; white-space: nowrap; }
+        .mob-strip-btn:active { transform: scale(0.91) !important; }
+        #mob-strip-row2 { display: flex; align-items: center; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 1px; }
+        #mob-strip-row2::-webkit-scrollbar { display: none; }
+
+        #mobile-panel-folders, #mobile-panel-search, #mobile-panel-settings { position: fixed; top: 0; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom,0px)); background: #f4f7f9; z-index: 80; overflow-y: auto; padding: 24px 20px; flex-direction: column; gap: 16px; }
+        .mob-panel-title { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; margin-bottom: 4px; }
+
+        /* ─── BIENVENIDA (pantalla pre-login) ─── */
+        #welcome-overlay {
+            position: fixed; inset: 0; z-index: 600;
+            background: var(--limit-gray);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 28px; padding: 40px;
+        }
+        #welcome-overlay.dismissed { display: none; }
+        #welcome-overlay .w-logo {
+            width: 110px; height: 110px; object-fit: contain;
+            border-radius: 2rem;
+            box-shadow: 0 20px 48px rgba(0,128,138,0.18), 0 4px 16px rgba(0,128,138,0.1);
+            transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        #welcome-overlay .w-logo:hover { transform: scale(1.06); }
+        #welcome-overlay .w-logo-fb {
+            width: 110px; height: 110px; background: #00808a;
+            border-radius: 2rem; display: none; align-items: center;
+            justify-content: center; color: white; font-size: 3rem;
+            font-weight: 900; font-style: italic;
+            box-shadow: 0 20px 48px rgba(0,128,138,0.18);
+        }
+        #welcome-overlay .w-title {
+            font-size: 3.2rem; font-weight: 900; color: #0a2540;
+            letter-spacing: -0.03em; margin: 0; line-height: 1;
+        }
+        #welcome-overlay .w-sub {
+            font-size: 1rem; color: #64748b; margin: 6px 0 0;
+            font-weight: 500; text-align: center;
+        }
+        .w-google-btn {
+            display: flex; align-items: center; gap: 10px;
+            background: white; border: 1.5px solid #e2e8f0;
+            border-radius: 16px; padding: 14px 28px;
+            font-size: 14px; font-weight: 700; color: #0a2540;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+        }
+        .w-google-btn:hover { border-color: #00808a; box-shadow: 0 8px 28px rgba(0,128,138,0.15); transform: translateY(-1px); }
+        .w-skip-btn {
+            font-size: 11px; font-weight: 700; color: #94a3b8;
+            background: none; border: none; cursor: pointer;
+            text-transform: uppercase; letter-spacing: .1em;
+            transition: color 0.2s;
+        }
+        .w-skip-btn:hover { color: #0a2540; }
+
+        /* ── Editor modal ───────────────────────────────────────────
+           position:fixed con z-index alto. JS añade/quita la clase
+           'open-modal' para mostrarlo — nunca se activa solo.
+           El toolbar queda sticky arriba; el área de contenido scrollea.  */
+        #editor-modal {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 150;
+            display: none;          /* oculto por defecto — JS lo abre */
+            flex-direction: column;
+        }
+        #editor-modal.open-modal {
+            display: flex !important;
+        }
+        #editor-modal > div:first-child {  /* toolbar */
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+        #editor-content-area {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* ── Jiji estado vacío ── */
+        .jiji-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; gap: 36px; grid-column: 1/-1; }
+        .jiji-wrap { animation: jiji-float 3.8s ease-in-out infinite; filter: drop-shadow(0 14px 36px rgba(0,128,138,0.1)); }
+        @keyframes jiji-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-16px)} }
+    </style>
+</head>
+<body class="min-h-screen pb-32">
+<div id="app-root">
+
+<!-- Config warning (se oculta solo si Supabase está bien configurado) -->
+<div id="config-warn">
+    ⚠ Supabase no pudo conectarse — verifica que la URL y la ANON KEY sean correctas.
+    Las notas se guardan en LocalStorage mientras tanto.
+</div>
+
+<!-- ════ PANTALLA DE BIENVENIDA (solo si no hay sesión activa) ════ -->
+<div id="welcome-overlay">
+
+    <!-- Logo grande -->
+    <img src="logo-limit.png" alt="LIMIT" class="w-logo"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="w-logo-fb">L</div>
+
+    <!-- Título -->
+    <div style="text-align:center">
+        <p class="w-title">LIMIT</p>
+        <p class="w-sub">Tu espacio de notas, tablas y código</p>
+    </div>
+
+    <!-- Botón Google -->
+    <button onclick="signInWithGoogle()" class="w-google-btn">
+        <svg viewBox="0 0 24 24" style="width:20px;height:20px;flex-shrink:0" fill="none">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Continuar con Google
+    </button>
+
+    <!-- Opción sin cuenta -->
+    <button onclick="dismissWelcome()" class="w-skip-btn">
+        Continuar sin cuenta →
+    </button>
+
+</div>
+
+<header class="px-6 py-8 max-w-7xl mx-auto flex flex-col gap-6">
+    <div class="flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <!-- Logo profesional 40px + texto -->
+            <img src="logo-limit.png" alt="LIMIT"
+                 style="height:40px;width:auto;object-fit:contain;border-radius:10px"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <!-- Fallback si el logo no carga -->
+            <div style="display:none;width:40px;height:40px;background:#00808a;border-radius:10px;align-items:center;justify-content:center;color:white;font-weight:900;font-style:italic;font-size:1.4rem;flex-shrink:0">L</div>
+            <h1 class="text-lg font-black uppercase tracking-widest">LIMIT</h1>
+        </div>
+
+        <!-- AUTH WIDGET -->
+        <div class="flex items-center gap-3">
+
+            <!-- Estado sin sesión -->
+            <div id="auth-guest" class="flex items-center">
+                <button onclick="signInWithGoogle()"
+                    class="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase text-slate-600 hover:border-[#00808a] hover:text-[#00808a] transition-all shadow-sm">
+                    <svg viewBox="0 0 24 24" class="w-4 h-4 flex-shrink-0" fill="none">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Conectar con Google
+                </button>
+            </div>
+
+            <!-- Estado autenticado -->
+            <div id="auth-user" class="items-center gap-2.5 relative">
+                <div id="sync-indicator" title="Estado de sincronización"></div>
+                <div class="user-avatar-wrap" onclick="toggleProfilePanel()">
+                    <img id="user-avatar" src="" alt="Avatar" class="user-avatar">
+                    <span class="online-dot"></span>
+                    <!-- Panel de perfil -->
+                    <div id="profile-panel">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f1f5f9">
+                            <img id="profile-avatar-lg" src="" alt="" style="width:52px;height:52px;border-radius:14px;object-fit:cover;background:#e2e8f0;flex-shrink:0">
+                            <div style="min-width:0">
+                                <p id="profile-name" style="font-weight:800;font-size:13px;color:#0a2540;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></p>
+                                <p id="profile-email" style="font-size:11px;color:#94a3b8;margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-bottom:14px">
+                            <div style="flex:1;background:#f4f7f9;border-radius:12px;padding:10px;text-align:center">
+                                <p id="profile-notes-count" style="font-size:22px;font-weight:900;color:#00808a;margin:0;line-height:1">0</p>
+                                <p style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 0">Notas</p>
+                            </div>
+                            <div style="flex:1;background:#f4f7f9;border-radius:12px;padding:10px;text-align:center">
+                                <p id="profile-folders-count" style="font-size:22px;font-weight:900;color:#0a2540;margin:0;line-height:1">0</p>
+                                <p style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 0">Carpetas</p>
+                            </div>
+                        </div>
+                        <div id="profile-sync-status" style="font-size:10px;font-weight:700;color:#94a3b8;text-align:center;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px">Sincronizado ✓</div>
+                        <button onclick="signOut()" style="width:100%;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;border-radius:12px;padding:10px;font-size:10px;font-weight:800;text-transform:uppercase;cursor:pointer;letter-spacing:.06em;transition:background .15s"
+                            onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">
+                            Cerrar Sesión
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="cleanCurrentFolder()" class="text-[9px] font-black text-red-400 bg-white border border-slate-200 px-5 py-2.5 rounded-xl uppercase hover:bg-red-50">Vaciar Carpeta</button>
+        </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 bg-white/50 p-4 rounded-[2rem] border border-white shadow-sm">
+        <div id="folder-list" class="flex flex-wrap gap-2"></div>
+        <button onclick="createNewFolder()" class="bg-white border-2 border-dashed border-slate-300 text-slate-400 px-6 py-2 rounded-full text-xs font-black uppercase hover:border-[#00808a] transition-all">+ Nueva Carpeta</button>
+    </div>
+
+    <div class="bg-white rounded-[2rem] p-2 shadow-xl border border-slate-100">
+        <input type="text" id="search-input" oninput="render()" placeholder="Buscar notas..." class="w-full bg-slate-50 border-none rounded-[1.5rem] px-6 py-4 text-sm outline-none">
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto p-6">
+    <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
+</main>
+
+<div id="editor-modal" class="bg-white flex-col" style="z-index:150">
+    <div class="p-4 border-b flex items-center justify-between bg-gray-50/95 backdrop-blur-md shadow-sm gap-3 flex-nowrap overflow-x-auto">
+        <!-- IZQUIERDA -->
+        <div class="flex items-center gap-3 flex-shrink-0">
+            <button onclick="closeModal()" class="text-[10px] font-black text-[#00808a] uppercase bg-white border px-5 py-2.5 rounded-xl shadow-sm whitespace-nowrap">← SALIR</button>
+            <div class="flex items-center gap-1.5 p-2 bg-white rounded-2xl border flex-shrink-0">
+                <div onclick="applyColor('bg-white')"       class="color-dot bg-white border-slate-200"></div>
+                <div onclick="applyColor('bg-yellow-300')"  class="color-dot bg-yellow-300"></div>
+                <div onclick="applyColor('bg-orange-500')"  class="color-dot bg-orange-500"></div>
+                <div onclick="applyColor('bg-red-500')"     class="color-dot bg-red-500"></div>
+                <div onclick="applyColor('bg-pink-400')"    class="color-dot bg-pink-400"></div>
+                <div onclick="applyColor('bg-teal-400')"    class="color-dot bg-teal-400"></div>
+                <div onclick="applyColor('bg-purple-800')"  class="color-dot bg-purple-800"></div>
+                <div onclick="applyColor('bg-blue-950')"    class="color-dot bg-blue-950"></div>
+                <div onclick="applyColor('bg-slate-700')"   class="color-dot bg-slate-700"></div>
+                <div onclick="applyColor('bg-lime-400')"    class="color-dot bg-lime-400"></div>
+                <div onclick="applyColor('bg-emerald-900')" class="color-dot bg-emerald-900"></div>
+                <div onclick="applyColor('bg-amber-900')"   class="color-dot bg-amber-900"></div>
+            </div>
+
+            <!-- Selector color de letra -->
+            <div class="txt-color-wrap" id="txt-color-wrap">
+                <div class="txt-color-btn" title="Color de letra">
+                    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <text x="1" y="11" font-family="system-ui,sans-serif" font-size="11" font-weight="800" fill="#0a2540">A</text>
+                    </svg>
+                    <span class="txt-color-bar" id="txt-color-bar"></span>
+                    <input type="color" id="txt-color-input" value="#0a2540"
+                           oninput="applyTextColor(this.value)"
+                           onchange="applyTextColor(this.value)"
+                           title="Selecciona color de letra">
+                </div>
+            </div>
+
+            <!-- Negrita + Alineación -->
+            <div class="fmt-group" id="fmt-tools">
+                <!-- Negrita -->
+                <button class="fmt-btn" id="btn-bold" title="Negrita (Ctrl+B)"
+                        onmousedown="event.preventDefault()"
+                        onclick="execFmt('bold')">
+                    <b>B</b>
+                </button>
+                <!-- Alineación izquierda -->
+                <button class="fmt-btn" id="btn-alignL" title="Alinear izquierda"
+                        onmousedown="event.preventDefault()"
+                        onclick="execFmt('justifyLeft')">
+                    <svg viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="6.5" x2="8" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+                <!-- Centrar -->
+                <button class="fmt-btn" id="btn-alignC" title="Centrar"
+                        onmousedown="event.preventDefault()"
+                        onclick="execFmt('justifyCenter')">
+                    <svg viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+                <!-- Alineación derecha -->
+                <button class="fmt-btn" id="btn-alignR" title="Alinear derecha"
+                        onmousedown="event.preventDefault()"
+                        onclick="execFmt('justifyRight')">
+                    <svg viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="5" y1="6.5" x2="12" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+
+            <div id="excel-tools" class="hidden items-center gap-2 border-l pl-3">
+                <button onclick="addRow()"       class="text-[9px] font-black bg-white border px-4 py-2.5 rounded-xl uppercase whitespace-nowrap">+ Fila</button>
+                <button onclick="addCol()"       class="text-[9px] font-black bg-white border px-4 py-2.5 rounded-xl uppercase whitespace-nowrap">+ Col</button>
+                <button onclick="paintColumn()"  class="text-[9px] font-black bg-[#00808a] text-white px-4 py-2.5 rounded-xl uppercase shadow-md whitespace-nowrap">Pintar Col</button>
+            </div>
+            <div id="image-tools" class="hidden items-center gap-2 border-l pl-3">
+                <label class="cursor-pointer text-[9px] font-black bg-white border px-4 py-2.5 rounded-xl uppercase hover:bg-slate-50 whitespace-nowrap">
+                    📷 Subir Imagen
+                    <input type="file" accept="image/*" class="hidden" onchange="insertImage(this)">
+                </label>
+            </div>
+        </div>
+        <!-- DERECHA -->
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <select id="move-to-folder" onchange="changeNoteFolder(this.value)" class="text-[10px] font-black uppercase border rounded-xl px-3 py-2.5 bg-white outline-none cursor-pointer"></select>
+            <div class="relative" id="download-btn-wrap">
+                <button onclick="toggleDownloadMenu(event)" class="flex items-center gap-1.5 bg-[#0a2540] text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-[#0d2f52] transition-all whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 3v12"/></svg>
+                    Descargar
+                </button>
+            </div>
+            <button onclick="closeModal()" class="bg-[#00808a] text-white px-8 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-lg whitespace-nowrap">Guardar</button>
+        </div>
+    </div>
+    <div class="p-8 md:p-12 overflow-y-auto h-full" id="editor-content-area" onclick="clearSelection(event)">
+        <div id="modal-title" contenteditable="true" data-placeholder="Título de la nota..." class="text-6xl font-black mb-12 outline-none border-l-[12px] border-[#00808a] pl-10 text-left"></div>
+        <div id="modal-body" class="text-xl leading-relaxed text-left"></div>
+    </div>
+</div>
+
+<div id="type-menu" class="fixed inset-0 backdrop-blur-sm hidden items-center justify-center z-[200]"
+     style="background:rgba(10,37,64,0.55)"
+     onclick="this.classList.replace('flex','hidden')">
+    <div id="type-menu-panel" onclick="event.stopPropagation()">
+        <p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#94a3b8;text-align:center;margin-bottom:20px;margin-top:0">Nueva nota</p>
+        <div id="type-menu-grid">
+            <button class="type-card" onclick="addNote('text')">
+                <div class="type-card-icon" style="background:#f0fdfc">📝</div>
+                <span>Texto</span>
+            </button>
+            <button class="type-card" onclick="addNote('table')">
+                <div class="type-card-icon" style="background:#eff6ff">📊</div>
+                <span>Tabla</span>
+            </button>
+            <button class="type-card" onclick="addNote('html-canvas')">
+                <div class="type-card-icon" style="background:#f0fdf4">🌐</div>
+                <span>Código</span>
+            </button>
+            <button class="type-card disabled" onclick="alert('Dibujo estará disponible próximamente 🎨')">
+                <div class="type-card-icon" style="background:#faf5ff">🎨</div>
+                <span>Próximamente</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Botón + Desktop (oculto en móvil) -->
+<button onclick="document.getElementById('type-menu').classList.replace('hidden','flex')"
+    class="hidden md:flex fixed bottom-10 right-10 bg-[#00808a] text-white w-20 h-20 rounded-[2.2rem] items-center justify-center shadow-2xl hover:scale-110 transition-all z-40 border-4 border-white">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M12 4v16m8-8H4" /></svg>
+</button>
+
+<!-- Menú de descarga -->
+<div id="download-menu" style="position:fixed;z-index:999999;background:white;border-radius:1.2rem;box-shadow:0 20px 50px -10px rgba(10,37,64,0.3);border:1px solid rgba(0,0,0,0.08);overflow:hidden;min-width:190px;opacity:0;transform:translateY(-8px) scale(0.97);pointer-events:none;transition:all 0.18s cubic-bezier(0.175,0.885,0.32,1.275);">
+    <button onclick="downloadNote('pdf')"  style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0a2540;background:transparent;border:none;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f4f7f9'" onmouseout="this.style.background='transparent'"><span style="width:28px;height:28px;border-radius:8px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📄</span> PDF</button>
+    <button onclick="downloadNote('png')"  style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0a2540;background:transparent;border:none;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f4f7f9'" onmouseout="this.style.background='transparent'"><span style="width:28px;height:28px;border-radius:8px;background:#e0f2fe;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🖼️</span> Imagen PNG</button>
+    <button onclick="downloadNote('html')" style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0a2540;background:transparent;border:none;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f4f7f9'" onmouseout="this.style.background='transparent'"><span style="width:28px;height:28px;border-radius:8px;background:#fef9c3;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🌐</span> HTML</button>
+    <button onclick="downloadNote('md')"   style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0a2540;background:transparent;border:none;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f4f7f9'" onmouseout="this.style.background='transparent'"><span style="width:28px;height:28px;border-radius:8px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📝</span> Markdown</button>
+</div>
+
+<!-- Spinner de descarga -->
+<div id="download-spinner">
+    <div class="spinner-ring"></div>
+    <span style="color:white;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em" id="spinner-label">Generando archivo...</span>
+</div>
+
+<!-- ══ MOBILE ══ -->
+<div id="mobile-panel-folders">
+    <p class="mob-panel-title">Carpetas</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px" id="mobile-folder-list"></div>
+    <button onclick="createNewFolder()" style="margin-top:8px;width:100%;background:white;border:2px dashed #cbd5e1;color:#94a3b8;padding:14px;border-radius:18px;font-size:11px;font-weight:800;text-transform:uppercase;cursor:pointer">+ Nueva Carpeta</button>
+</div>
+
+<div id="mobile-panel-search">
+    <p class="mob-panel-title">Buscar</p>
+    <div style="background:white;border-radius:18px;padding:4px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,0.06)">
+        <svg style="width:16px;height:16px;flex-shrink:0;stroke:#94a3b8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35"/></svg>
+        <input id="mobile-search-input" type="text" placeholder="Buscar notas..." oninput="document.getElementById('search-input').value=this.value; render()" style="width:100%;border:none;outline:none;padding:14px 0;font-size:14px;background:transparent">
+    </div>
+    <div id="mobile-search-results" style="margin-top:12px;font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.08em"></div>
+</div>
+
+<div id="mobile-panel-settings">
+    <p class="mob-panel-title">Cuenta</p>
+    <div id="mob-auth-guest" style="background:white;border-radius:22px;padding:20px;box-shadow:0 4px 16px rgba(0,0,0,0.05);margin-bottom:14px">
+        <button onclick="signInWithGoogle()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#00808a;color:white;border:none;border-radius:14px;padding:14px;font-size:11px;font-weight:800;text-transform:uppercase;cursor:pointer;letter-spacing:.06em">
+            Conectar con Google
+        </button>
+    </div>
+    <div id="mob-auth-user" style="display:none;background:white;border-radius:22px;padding:16px;box-shadow:0 4px 16px rgba(0,0,0,0.05);margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <img id="mob-user-avatar" src="" style="width:42px;height:42px;border-radius:12px;object-fit:cover;background:#e2e8f0;flex-shrink:0" alt="">
+            <div style="min-width:0">
+                <p id="mob-user-name"  style="font-size:13px;font-weight:800;color:#0a2540;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></p>
+                <p id="mob-user-email" style="font-size:11px;color:#94a3b8;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></p>
+            </div>
+        </div>
+        <button onclick="signOut()" style="width:100%;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;border-radius:12px;padding:10px;font-size:11px;font-weight:800;text-transform:uppercase;cursor:pointer">Cerrar Sesión</button>
+    </div>
+    <p class="mob-panel-title" style="margin-top:4px">Ajustes</p>
+    <div style="background:white;border-radius:22px;padding:20px;box-shadow:0 4px 16px rgba(0,0,0,0.05)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase">Carpeta actual</span>
+            <span id="mob-settings-folder" style="font-size:12px;font-weight:800;color:#00808a">Todas</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase">Total notas</span>
+            <span id="mob-settings-count" style="font-size:12px;font-weight:800;color:#0a2540">0</span>
+        </div>
+        <button onclick="cleanCurrentFolder()" style="margin-top:12px;width:100%;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;border-radius:14px;padding:13px;font-size:11px;font-weight:800;text-transform:uppercase;cursor:pointer">Vaciar Carpeta Actual</button>
+    </div>
+</div>
+
+<button id="mobile-fab" onclick="document.getElementById('type-menu').classList.replace('hidden','flex')">
+    <svg style="width:28px;height:28px" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+</button>
+
+<div id="mobile-toolbar-strip" class="strip-hidden">
+    <div id="mob-strip-row1">
+        <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="closeModal()" class="mob-strip-btn" style="background:#e0f7f8;color:#00808a;border:1px solid #b2e5e8">← Salir</button>
+            <select id="mobile-move-folder" onchange="changeNoteFolder(this.value)" style="font-size:9px;font-weight:800;text-transform:uppercase;border:1px solid #e2e8f0;border-radius:12px;padding:8px 10px;background:white;outline:none;cursor:pointer;max-width:130px"></select>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="toggleDownloadMenu(event)" class="mob-strip-btn" style="background:#0a2540;color:white">
+                <svg style="width:11px;height:11px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 3v12"/></svg>
+                Descargar
+            </button>
+            <button onclick="closeModal()" class="mob-strip-btn" style="background:#00808a;color:white">Guardar ✓</button>
+        </div>
+    </div>
+    <div id="mob-strip-row2">
+        <div onclick="applyColor('bg-white')"       class="color-dot bg-white"       style="border-color:#cbd5e1;flex-shrink:0"></div>
+        <div onclick="applyColor('bg-yellow-300')"  class="color-dot bg-yellow-300"  style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-orange-500')"  class="color-dot bg-orange-500"  style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-red-500')"     class="color-dot bg-red-500"     style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-pink-400')"    class="color-dot bg-pink-400"    style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-teal-400')"    class="color-dot bg-teal-400"    style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-purple-800')"  class="color-dot bg-purple-800"  style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-blue-950')"    class="color-dot bg-blue-950"    style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-slate-700')"   class="color-dot bg-slate-700"   style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-lime-400')"    class="color-dot bg-lime-400"    style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-emerald-900')" class="color-dot bg-emerald-900" style="flex-shrink:0"></div>
+        <div onclick="applyColor('bg-amber-900')"   class="color-dot bg-amber-900"   style="flex-shrink:0"></div>
+        <div style="width:1px;height:18px;background:#e2e8f0;flex-shrink:0"></div>
+        <!-- Color de letra (móvil) -->
+        <div id="mob-txt-color-wrap" style="position:relative;width:28px;height:28px;border-radius:50%;background:white;border:1.5px solid #e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,0.08);" title="Color de letra">
+            <svg viewBox="0 0 14 14" style="width:14px;height:14px;pointer-events:none" fill="none"><text x="1" y="11" font-family="system-ui,sans-serif" font-size="11" font-weight="800" fill="#0a2540">A</text></svg>
+            <span id="mob-txt-color-bar" style="position:absolute;bottom:4px;left:5px;right:5px;height:3px;border-radius:2px;background:#0a2540;pointer-events:none"></span>
+            <input type="color" id="mob-txt-color-input" value="#0a2540"
+                   oninput="applyTextColor(this.value)"
+                   onchange="applyTextColor(this.value)"
+                   style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:none;padding:0">
+        </div>
+        <!-- Negrita + Alineación (móvil) -->
+        <div style="width:1px;height:18px;background:#e2e8f0;flex-shrink:0"></div>
+        <!-- Negrita -->
+        <button class="fmt-btn" id="mob-btn-bold" title="Negrita"
+                onmousedown="event.preventDefault()" onclick="execFmt('bold')">
+            <b style="font-size:13px">B</b>
+        </button>
+        <!-- Alinear izq / centro / der — solo notas normales -->
+        <div id="mob-align-btns" style="display:flex;align-items:center;gap:6px">
+        <button class="fmt-btn" id="mob-btn-alignL" title="Izquierda"
+                onmousedown="event.preventDefault()" onclick="execFmt('justifyLeft')">
+            <svg style="width:13px;height:13px" viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="6.5" x2="8" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <!-- Centrar -->
+        <button class="fmt-btn" id="mob-btn-alignC" title="Centro"
+                onmousedown="event.preventDefault()" onclick="execFmt('justifyCenter')">
+            <svg style="width:13px;height:13px" viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <!-- Alinear der -->
+        <button class="fmt-btn" id="mob-btn-alignR" title="Derecha"
+                onmousedown="event.preventDefault()" onclick="execFmt('justifyRight')">
+            <svg style="width:13px;height:13px" viewBox="0 0 13 13" fill="none"><line x1="1" y1="3" x2="12" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="5" y1="6.5" x2="12" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        </div>
+        <div id="mob-excel-btns" style="display:none;align-items:center;gap:6px">
+            <button onclick="addRow()"      class="mob-strip-btn" style="background:#f8fafc;border:1px solid #e2e8f0;color:#475569">+Fila</button>
+            <button onclick="addCol()"      class="mob-strip-btn" style="background:#f8fafc;border:1px solid #e2e8f0;color:#475569">+Col</button>
+            <button onclick="paintColumn()" class="mob-strip-btn" style="background:#00808a;color:white">Pintar</button>
+            <div style="width:1px;height:18px;background:#e2e8f0;flex-shrink:0"></div>
+        </div>
+        <div id="mob-image-btn" style="display:none;align-items:center">
+            <label class="mob-strip-btn" style="background:#f8fafc;border:1px solid #e2e8f0;color:#475569;cursor:pointer">
+                📷 Imagen <input type="file" accept="image/*" style="display:none" onchange="insertImage(this)">
+            </label>
+        </div>
+    </div>
+</div>
+
+<nav id="mobile-bottom-nav">
+    <button class="mob-nav-btn mnav-active" id="mnav-notes" onclick="mobileTab('notes')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3" stroke-linecap="round"/><path stroke-linecap="round" d="M8 9h8M8 13h5"/></svg>
+        <span>Notas</span>
+    </button>
+    <button class="mob-nav-btn" id="mnav-folders" onclick="mobileTab('folders')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+        <span>Carpetas</span>
+    </button>
+    <button class="mob-nav-btn" id="mnav-search" onclick="mobileTab('search')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35"/></svg>
+        <span>Buscar</span>
+    </button>
+    <button class="mob-nav-btn" id="mnav-settings" onclick="mobileTab('settings')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span>Ajustes</span>
+    </button>
+</nav>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   CONFIGURACIÓN SUPABASE
+   ────────────────────────────────────────────────────────────
+   URL ya configurada. Para la anon key:
+   → https://supabase.com/dashboard/project/eclytljrgaiihdzirxrp/settings/api
+   → Copia el campo "anon · public"
+
+   SQL para crear la tabla (ejecuta en Supabase → SQL Editor):
+   ────────────────────────────────────────────────────────────
+   create table public.notes (
+     id          text primary key,
+     user_id     uuid references auth.users(id) on delete cascade not null,
+     title       text    default '',
+     type        text    default 'text',
+     content     text    default '',
+     color       text    default 'bg-white',
+     folder      text    default 'General',
+     cell_colors text    default '{}',
+     lang        text    default 'html',
+     created_at  timestamptz default now(),
+     updated_at  timestamptz default now()
+   );
+   alter table public.notes enable row level security;
+   create policy "Notas propias" on public.notes
+     using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+   En Supabase → Authentication → Providers → Google: actívalo.
+   En Authentication → URL Configuration → Site URL: pon tu dominio.
+   GOOGLE_CLIENT_ID se configura en el proveedor de Google en Supabase.
+════════════════════════════════════════════════════════════════ */
+const SB_URL          = 'https://eclytljrgaiihdzirxrp.supabase.co';
+const SB_KEY          = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjbHl0bGpyZ2FpaWhkemlyeHJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTk1NjgsImV4cCI6MjA5MTkzNTU2OH0.QOHtgwDBh_v8kcEotd44SFP81IKj4KD28jBDmTTq7IY';
+/* GOOGLE_CLIENT_ID — ya registrado en Supabase > Auth > Providers > Google:
+   922370181043-9kud1t3mrvm42h3cdhghs9d74gbdhhgj.apps.googleusercontent.com
+   No se usa en el HTML directamente; Supabase lo gestiona internamente. */
+
+/* ════════════════════════════════════════════════════════════════
+   PANTALLA DE BIENVENIDA
+════════════════════════════════════════════════════════════════ */
+function showWelcomeOverlay() {
+    const dismissed = localStorage.getItem('limit_welcome_dismissed');
+    if (!dismissed) {
+        document.getElementById('welcome-overlay')?.classList.remove('dismissed');
+    } else {
+        document.getElementById('welcome-overlay')?.classList.add('dismissed');
+    }
+}
+
+function dismissWelcome() {
+    localStorage.setItem('limit_welcome_dismissed', '1');
+    const ov = document.getElementById('welcome-overlay');
+    if (ov) {
+        ov.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        ov.style.opacity    = '0';
+        ov.style.transform  = 'scale(0.97)';
+        setTimeout(() => ov.classList.add('dismissed'), 400);
+    }
+}
+
+function hideWelcomeOverlay() {
+    const ov = document.getElementById('welcome-overlay');
+    if (!ov) return;
+    ov.style.transition = 'opacity 0.35s ease';
+    ov.style.opacity    = '0';
+    setTimeout(() => ov.classList.add('dismissed'), 350);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ESTADO GLOBAL
+════════════════════════════════════════════════════════════════ */
+let notes         = JSON.parse(localStorage.getItem('limit_notes_v9'))  || [];
+let folders       = JSON.parse(localStorage.getItem('limit_folders_v9')) || ['General', 'Estrategia', 'SEO'];
+let currentFolder = 'Todas';
+let currentId     = null;
+let activeCell    = null;
+let currentUser   = null;  // usuario autenticado
+let sb            = null;  // cliente Supabase
+let sbReady       = false; // true si está bien configurado
+
+const darkColors = ['bg-purple-800','bg-blue-950','bg-slate-700','bg-emerald-900','bg-amber-900','bg-orange-500','bg-red-500'];
+
+/* ════════════════════════════════════════════════════════════════
+   SUPABASE — INIT + AUTH
+════════════════════════════════════════════════════════════════ */
+function initSupabase() {
+    const isValidKey = SB_KEY.startsWith('eyJ') && SB_KEY.length > 100;
+    const tryConnect = SB_URL.includes('.supabase.co') && isValidKey;
+
+    if (!tryConnect) {
+        document.getElementById('config-warn').classList.add('show');
+        return;
+    }
+
+    try {
+        sb = supabase.createClient(SB_URL, SB_KEY);
+        sbReady = true;
+
+        // Escuchar cambios de sesión (incluye retorno de OAuth redirect)
+        sb.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
+                currentUser = session.user;
+                updateAuthUI(true);
+                await loadNotesFromCloud();
+            } else {
+                currentUser = null;
+                updateAuthUI(false);
+            }
+        });
+
+        // Verificar sesión activa al cargar
+        sb.auth.getSession().then(({ data }) => {
+            if (data.session?.user) {
+                currentUser = data.session.user;
+                updateAuthUI(true);
+                loadNotesFromCloud();
+            }
+        });
+    } catch(e) {
+        console.warn('[LIMIT] Supabase init failed:', e.message);
+        document.getElementById('config-warn').classList.add('show');
+    }
+}
+
+async function signInWithGoogle() {
+    if (!sbReady) {
+        alert('Supabase no pudo conectarse. Verifica la configuración.');
+        return;
+    }
+    const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href }
+    });
+    if (error) console.error('[LIMIT] OAuth error:', error.message);
+}
+
+async function signOut() {
+    if (!sbReady) return;
+    closeProfilePanel();
+    await sb.auth.signOut();
+    currentUser = null;
+    updateAuthUI(false);
+    notes = JSON.parse(localStorage.getItem('limit_notes_v9')) || [];
+    render();
+}
+
+function updateAuthUI(loggedIn) {
+    const guestEl   = document.getElementById('auth-guest');
+    const userEl    = document.getElementById('auth-user');
+    const mobGuest  = document.getElementById('mob-auth-guest');
+    const mobUser   = document.getElementById('mob-auth-user');
+
+    if (loggedIn && currentUser) {
+        hideWelcomeOverlay(); /* ocultar pantalla de bienvenida al autenticarse */
+        if (guestEl)  guestEl.style.display  = 'none';
+        if (userEl)   { userEl.style.display = 'flex'; }
+        if (mobGuest) mobGuest.style.display  = 'none';
+        if (mobUser)  mobUser.style.display   = 'block';
+
+        const meta      = currentUser.user_metadata || {};
+        const avatarUrl = meta.avatar_url || meta.picture || '';
+        const name      = meta.full_name  || meta.name    || currentUser.email || '';
+        const email     = currentUser.email || '';
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        const setSrc = (id, val) => { const el = document.getElementById(id); if (el) el.src = val; };
+
+        setSrc('user-avatar',      avatarUrl);
+        setSrc('profile-avatar-lg', avatarUrl);
+        setSrc('mob-user-avatar',  avatarUrl);
+        setEl('profile-name',  name);
+        setEl('profile-email', email);
+        setEl('mob-user-name',  name);
+        setEl('mob-user-email', email);
+        setSyncStatus('synced');
+    } else {
+        if (guestEl)  guestEl.style.display  = 'flex';
+        if (userEl)   userEl.style.display   = 'none';
+        if (mobGuest) mobGuest.style.display  = 'block';
+        if (mobUser)  mobUser.style.display   = 'none';
+        setSyncStatus('offline');
+    }
+}
+
+function toggleProfilePanel() {
+    const panel = document.getElementById('profile-panel');
+    if (!panel) return;
+    if (panel.classList.contains('open')) {
+        closeProfilePanel();
+    } else {
+        const el_nc = document.getElementById('profile-notes-count');
+        const el_fc = document.getElementById('profile-folders-count');
+        if (el_nc) el_nc.textContent = notes.length;
+        if (el_fc) el_fc.textContent = folders.length;
+        panel.classList.add('open');
+    }
+}
+function closeProfilePanel() {
+    document.getElementById('profile-panel')?.classList.remove('open');
+}
+
+document.addEventListener('click', e => {
+    const panel   = document.getElementById('profile-panel');
+    const wrap    = document.querySelector('.user-avatar-wrap');
+    const dlMenu  = document.getElementById('download-menu');
+    // Cerrar profile
+    if (panel?.classList.contains('open') && !wrap?.contains(e.target)) closeProfilePanel();
+    // Cerrar download menu
+    if (dlMenu) { dlMenu.style.opacity='0'; dlMenu.style.transform='translateY(-8px) scale(0.97)'; dlMenu.style.pointerEvents='none'; }
+});
+
+function setSyncStatus(state) {
+    const dot   = document.getElementById('sync-indicator');
+    const label = document.getElementById('profile-sync-status');
+    if (dot) {
+        dot.className = '';
+        dot.id        = 'sync-indicator';
+        if (state === 'syncing') dot.classList.add('syncing');
+        else if (state === 'synced') dot.classList.add('synced');
+        else if (state === 'error')  dot.classList.add('error');
+    }
+    if (label) {
+        const msgs = { syncing:'Sincronizando…', synced:'Sincronizado ✓', error:'Error al sincronizar', offline:'Modo sin conexión' };
+        label.textContent = msgs[state] || '';
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SUPABASE — DB
+════════════════════════════════════════════════════════════════ */
+function noteToRow(n) {
+    return {
+        id:          String(n.id),
+        user_id:     currentUser.id,
+        title:       n.title       || '',
+        type:        n.type        || 'text',
+        content:     JSON.stringify(n.content),
+        color:       n.color       || 'bg-white',
+        folder:      n.folder      || 'General',
+        cell_colors: JSON.stringify(n.cellColors || {}),
+        lang:        n.lang        || 'html',
+        updated_at:  new Date().toISOString()
+    };
+}
+function rowToNote(r) {
+    let content = r.content;
+    try { content = JSON.parse(r.content); } catch(_) {}
+    let cellColors = {};
+    try { cellColors = JSON.parse(r.cell_colors || '{}'); } catch(_) {}
+    return { id: r.id, type: r.type||'text', title: r.title||'', content, color: r.color||'bg-white', folder: r.folder||'General', cellColors, lang: r.lang||'html' };
+}
+
+async function loadNotesFromCloud() {
+    if (!sbReady || !currentUser) return;
+    setSyncStatus('syncing');
+    try {
+        const { data, error } = await sb.from('notes').select('*')
+            .eq('user_id', currentUser.id).order('created_at', { ascending: false });
+        if (error) throw error;
+        notes = (data || []).map(rowToNote);
+        // Sincronizar carpetas desde la nube
+        [...new Set(notes.map(n => n.folder).filter(Boolean))].forEach(f => { if (!folders.includes(f)) folders.push(f); });
+        localStorage.setItem('limit_notes_v9',  JSON.stringify(notes));
+        localStorage.setItem('limit_folders_v9', JSON.stringify(folders));
+        setSyncStatus('synced');
+        render();
+    } catch(err) {
+        console.error('[LIMIT] loadNotes error:', err);
+        setSyncStatus('error');
+    }
+}
+
+let _syncTimer = null;
+function scheduleSyncToCloud() {
+    if (!sbReady || !currentUser) return;
+    clearTimeout(_syncTimer);
+    setSyncStatus('syncing');
+    _syncTimer = setTimeout(async () => {
+        try {
+            const rows = notes.map(noteToRow);
+            for (let i = 0; i < rows.length; i += 50) {
+                const { error } = await sb.from('notes').upsert(rows.slice(i, i+50), { onConflict: 'id' });
+                if (error) throw error;
+            }
+            setSyncStatus('synced');
+        } catch(err) {
+            console.error('[LIMIT] sync error:', err);
+            setSyncStatus('error');
+        }
+    }, 1600);
+}
+
+async function deleteNoteFromCloud(id) {
+    if (!sbReady || !currentUser) return;
+    try { await sb.from('notes').delete().eq('id', String(id)).eq('user_id', currentUser.id); }
+    catch(err) { console.error('[LIMIT] delete error:', err); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SAVE HÍBRIDO
+════════════════════════════════════════════════════════════════ */
+function save() {
+    localStorage.setItem('limit_notes_v9',  JSON.stringify(notes));
+    localStorage.setItem('limit_folders_v9', JSON.stringify(folders));
+    if (sbReady && currentUser) scheduleSyncToCloud();
+    render();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   IMAGEN — REDIMENSIÓN  (idéntico al original)
+════════════════════════════════════════════════════════════════ */
+function clearSelection(e) {
+    if (e && !e.target.closest('td') && !e.target.closest('th')) {
+        activeCell = null;
+        document.querySelectorAll('.selected-cell').forEach(el => el.classList.remove('selected-cell'));
+    }
+    if (e && !e.target.closest('.img-resize-wrapper')) {
+        document.querySelectorAll('.img-resize-wrapper.selected').forEach(w => w.classList.remove('selected'));
+    }
+}
+
+function initImageResize(editable) {
+    editable.querySelectorAll('img.note-img').forEach(img => {
+        if (img.closest('.img-resize-wrapper')) return;
+        wrapImage(img);
+    });
+}
+
+function wrapImage(img) {
+    /* El wrapper es DIV (no span) — es la única forma fiable de hacer que
+       float funcione en Chrome dentro de un contenteditable. Un <span> con
+       display:block + float tiene bugs conocidos que dejan al span en la
+       línea base del texto en vez de flotar.                               */
+    const wrapper = document.createElement('div');
+    wrapper.className = 'img-resize-wrapper';
+    wrapper.contentEditable = 'false';
+    /* ID único para drag-and-drop */
+    const wrapId = 'lc-img-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    wrapper.dataset.wrapId = wrapId;
+
+    /* ── Ancho automático: el wrapper se ajusta al tamaño de la imagen,
+         no ocupa el 100% del ancho del padre. max-content hace que tome
+         solo el espacio necesario, con un tope de max-width:100%.       */
+    wrapper.style.width    = 'max-content';
+    wrapper.style.maxWidth = '100%';
+
+    /* ── Barra de controles de ajuste de texto ── */
+    const ctrlBar = document.createElement('div');
+    ctrlBar.className = 'img-ctrl-bar';
+    ctrlBar.innerHTML = `
+        <button class="img-ctrl-btn" title="Texto alrededor izquierda"
+                onclick="setImgWrap(this,'wrap-left')">
+            <svg width="12" height="12" fill="none" viewBox="0 0 12 12"><rect x="0" y="0" width="4" height="9" rx="1" fill="currentColor"/><line x1="6" y1="2" x2="11" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="6" y1="5" x2="11" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="0" y1="11" x2="11" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Izq
+        </button>
+        <button class="img-ctrl-btn" title="Sin ajuste (bloque)"
+                onclick="setImgWrap(this,'wrap-none')">
+            <svg width="12" height="12" fill="none" viewBox="0 0 12 12"><line x1="0" y1="2" x2="12" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="2" y="4" width="8" height="4" rx="1" fill="currentColor" opacity=".5"/><line x1="0" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Bloque
+        </button>
+        <button class="img-ctrl-btn" title="Texto alrededor derecha"
+                onclick="setImgWrap(this,'wrap-right')">
+            <svg width="12" height="12" fill="none" viewBox="0 0 12 12"><rect x="8" y="0" width="4" height="9" rx="1" fill="currentColor"/><line x1="0" y1="2" x2="6" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="0" y1="5" x2="6" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="0" y1="11" x2="12" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Der
+        </button>`;
+    wrapper.appendChild(ctrlBar);
+
+    const label = document.createElement('span');
+    label.className = 'size-label';
+    wrapper.appendChild(label);
+
+    img.parentNode.insertBefore(wrapper, img);
+    wrapper.appendChild(img);
+
+    if (!img.style.width) img.style.width = Math.min(img.naturalWidth || 300, 300) + 'px';
+    img.style.height  = 'auto';
+    img.style.display = 'block';
+
+    ['nw', 'ne', 'sw', 'se'].forEach(dir => {
+        const handle = document.createElement('span');
+        handle.className = `resize-handle ${dir}`;
+        handle.dataset.dir = dir;
+        wrapper.appendChild(handle);
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            startResize(e, img, wrapper, label, dir);
+        });
+    });
+
+    /* ── Drag-and-drop: mover (no clonar) ── */
+    wrapper.setAttribute('draggable', 'true');
+
+    wrapper.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', wrapId);
+        setTimeout(() => wrapper.style.opacity = '0.4', 0);
+    });
+
+    wrapper.addEventListener('dragend', () => {
+        wrapper.style.opacity = '1';
+    });
+
+    /* Bloquear el drag nativo de <img> (que clona) */
+    img.addEventListener('dragstart', (e) => { e.preventDefault(); e.stopPropagation(); });
+
+    img.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.img-resize-wrapper.selected')
+                .forEach(w => { if (w !== wrapper) w.classList.remove('selected'); });
+        wrapper.classList.toggle('selected');
+    });
+}
+
+/* ── Listener GLOBAL de teclado para eliminar imagen seleccionada ──
+   Se registra UNA sola vez en el arranque (no por-imagen).
+   Si hay alguna imagen seleccionada y se pulsa Delete/Backspace:
+   - La quita del DOM con wrapper.remove()
+   - Persiste el contenido actualizado
+   Funciona aunque el foco esté en el editable (caso común).        */
+if (!window._imgDelKeyRegistered) {
+    window._imgDelKeyRegistered = true;
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+
+        const selectedWrapper = document.querySelector('.img-resize-wrapper.selected');
+        if (!selectedWrapper) return;
+
+        /* Si el foco está en un input/textarea real, no interceptar */
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        /* Eliminar también el clearfix inmediatamente después si existe */
+        const next = selectedWrapper.nextSibling;
+        if (next?.classList?.contains('img-clearfix')) next.remove();
+
+        selectedWrapper.remove();
+        persistContent();
+    });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DRAG & DROP DE IMÁGENES
+   ──────────────────────────────────────────────────────────────
+   Se registra UNA vez por nota abierta (flag _imgDropRegistered).
+   Usa caretRangeFromPoint para inserción precisa entre palabras.
+   Muestra un cursor teal de 2 px que sigue al puntero.
+   Bloquea drops sobre <td>/<th> para no romper tablas.
+══════════════════════════════════════════════════════════════ */
+function _registerImgDropTarget(editable) {
+    if (editable._imgDropRegistered) return;
+    editable._imgDropRegistered = true;
+
+    /* ── Cursor visual de posición ── */
+    let _cur = null;
+    const _showCur = (x, y) => {
+        if (!_cur) {
+            _cur = document.createElement('div');
+            _cur.style.cssText = [
+                'position:fixed','width:2px','height:26px',
+                'background:#00808a','border-radius:2px',
+                'pointer-events:none','z-index:9000',
+                'box-shadow:0 0 8px rgba(0,128,138,0.7)',
+                'transform:translateX(-1px)','transition:top .05s,left .05s'
+            ].join(';');
+            document.body.appendChild(_cur);
+        }
+        Object.assign(_cur.style, { left: x+'px', top: (y-13)+'px', display:'block' });
+    };
+    const _hideCur = () => { if (_cur) _cur.style.display = 'none'; };
+
+    editable.addEventListener('dragover', e => {
+        const types = e.dataTransfer.types;
+        if (!types || !Array.from(types).includes('text/plain')) return;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under?.closest('td,th,table')) return; // bloquear sobre tablas
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        _showCur(e.clientX, e.clientY);
+    });
+
+    editable.addEventListener('dragleave', e => {
+        if (!editable.contains(e.relatedTarget)) _hideCur();
+    });
+
+    editable.addEventListener('drop', e => {
+        _hideCur();
+        const wrapId = e.dataTransfer.getData('text/plain');
+        if (!wrapId || !wrapId.startsWith('lc-img-')) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const wrapper = editable.querySelector(`[data-wrap-id="${wrapId}"]`);
+        if (!wrapper) return;
+
+        /* Bloquear si soltamos sobre una celda */
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under?.closest('td,th,table')) { wrapper.style.opacity='1'; return; }
+
+        /* Guardar clase de float y clearfix asociado */
+        const wrapCls = ['wrap-left','wrap-right','wrap-none']
+                         .find(c => wrapper.classList.contains(c));
+        const nextEl  = wrapper.nextSibling;
+        const hasCF   = nextEl?.classList?.contains('img-clearfix');
+
+        /* Calcular posición de inserción con caretRangeFromPoint */
+        let range = null;
+        if (document.caretRangeFromPoint) {
+            range = document.caretRangeFromPoint(e.clientX, e.clientY);
+        } else if (document.caretPositionFromPoint) {
+            const cp = document.caretPositionFromPoint(e.clientX, e.clientY);
+            if (cp) { range = document.createRange(); range.setStart(cp.offsetNode, cp.offset); range.collapse(true); }
+        }
+
+        /* Validar que el destino esté dentro del editable y no en una tabla */
+        if (!range || !editable.contains(range.startContainer)) { wrapper.style.opacity='1'; return; }
+        let dn = range.startContainer;
+        if (dn.nodeType === Node.TEXT_NODE) dn = dn.parentElement;
+        if (dn?.closest('td,th,table')) { wrapper.style.opacity='1'; return; }
+
+        /* Quitar wrapper (y su clearfix) del DOM y reinsertar en el range */
+        wrapper.remove();
+        if (hasCF) nextEl.remove();
+        range.insertNode(wrapper);
+
+        /* Restaurar clearfix si tenía float */
+        if (wrapCls && wrapCls !== 'wrap-none') {
+            const cf = document.createElement('div');
+            cf.className = 'img-clearfix';
+            wrapper.parentNode.insertBefore(cf, wrapper.nextSibling);
+        }
+
+        wrapper.style.opacity = '1';
+        wrapper.classList.remove('selected');
+        persistContent();
+    });
+}
+
+/* Aplicar clase de ajuste de texto a la imagen seleccionada */
+function setImgWrap(btn, wrapClass) {
+    const wrapper = btn.closest('.img-resize-wrapper');
+    if (!wrapper) return;
+
+    /* Limpiar clases y estilos inline anteriores */
+    ['wrap-left','wrap-right','wrap-none'].forEach(c => wrapper.classList.remove(c));
+    wrapper.style.cssText = ''; /* dejar que CSS !important maneje el display y float */
+    wrapper.classList.add(wrapClass);
+
+    /* Estado visual de los botones */
+    wrapper.querySelectorAll('.img-ctrl-btn').forEach(b => b.classList.remove('active-wrap'));
+    btn.classList.add('active-wrap');
+
+    if (wrapClass === 'wrap-none') {
+        /* Eliminar clearfix previo si existe */
+        const nx = wrapper.nextSibling;
+        if (nx?.classList?.contains('img-clearfix')) nx.remove();
+    } else {
+        /* Insertar clearfix después del wrapper para cerrar el float */
+        const nx = wrapper.nextSibling;
+        if (!nx?.classList?.contains('img-clearfix')) {
+            const cf = document.createElement('div');
+            cf.className = 'img-clearfix';
+            wrapper.parentNode.insertBefore(cf, wrapper.nextSibling);
+        }
+    }
+    persistContent();
+}
+
+function startResize(e, img, wrapper, label, dir) {
+    const startX = e.clientX, startW = img.offsetWidth, startH = img.offsetHeight;
+    const aspectRatio = startH / startW;
+    wrapper.classList.add('resizing');
+
+    function onMove(ev) {
+        let dx = ev.clientX - startX;
+        if (dir === 'nw' || dir === 'sw') dx = -dx;
+        const newW = Math.max(80, startW + dx);
+        const newH = newW * aspectRatio;
+        img.style.width  = newW + 'px';
+        img.style.height = newH + 'px';
+        label.textContent = `${Math.round(newW)} × ${Math.round(newH)}`;
+    }
+    function onUp() {
+        wrapper.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        persistContent();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+}
+
+function saveContentBeforeRemove() {}
+
+function persistContent() {
+    const note = notes.find(n => n.id === currentId);
+    if (!note || note.type !== 'text') return;
+    const editable = document.getElementById('modal-body').querySelector('[contenteditable="true"]');
+    if (editable) {
+        note.content = editable.innerHTML;
+        save();
+    }
+}
+
+function insertImage(input) {
+    const note = notes.find(n => n.id === currentId);
+    if (note && note.type !== 'text') {
+        alert('Las imágenes solo se pueden insertar en notas de texto.');
+        input.value = '';
+        return;
+    }
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const modalBody = document.getElementById('modal-body');
+            const editable  = modalBody.querySelector('[contenteditable="true"]');
+            if (editable) {
+                editable.focus();
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'note-img';
+                img.style.width = '300px'; img.style.height = 'auto';
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    const range = sel.getRangeAt(0);
+                    if (editable.contains(range.commonAncestorContainer)) {
+                        range.deleteContents(); range.insertNode(img);
+                        range.setStartAfter(img); range.collapse(true);
+                        sel.removeAllRanges(); sel.addRange(range);
+                    } else { editable.appendChild(img); }
+                } else { editable.appendChild(img); }
+                wrapImage(img);
+                persistContent();
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   NOTAS — CRUD
+════════════════════════════════════════════════════════════════ */
+function addNote(type) {
+    const id = Date.now();
+    const content = (type === 'table') ? [['ENCABEZADO 1','ENCABEZADO 2'],['','']] : '';
+    notes.unshift({ id, type, title: '', content, color: 'bg-white', folder: (currentFolder === 'Todas' ? 'General' : currentFolder), cellColors: {}, lang: 'html' });
+    save();
+    document.getElementById('type-menu').classList.replace('flex','hidden');
+    openEditor(id);
+}
+
+function deleteNote(id, e) {
+    e.stopPropagation();
+    if (!confirm('¿Eliminar?')) return;
+    notes = notes.filter(n => n.id !== id);
+    save();
+    deleteNoteFromCloud(id);
+}
+
+function createNewFolder() {
+    const name = prompt('Nombre:');
+    if (name && !folders.includes(name)) { folders.push(name); save(); }
+}
+function changeNoteFolder(f) {
+    notes.find(n => n.id === currentId).folder = f;
+    save();
+    const ds = document.getElementById('move-to-folder'); if (ds) ds.value = f;
+    const ms = document.getElementById('mobile-move-folder'); if (ms) ms.value = f;
+}
+function closeModal() {
+    document.getElementById('editor-modal').classList.remove('open-modal');
+    document.getElementById('mobile-toolbar-strip')?.classList.add('strip-hidden');
+    render();
+}
+function deleteFolder(f, e) {
+    e.stopPropagation();
+    if (!confirm('¿Eliminar carpeta?')) return;
+    folders = folders.filter(x => x !== f);
+    notes.forEach(n => { if (n.folder === f) n.folder = 'General'; });
+    save();
+}
+function cleanCurrentFolder() {
+    if (!confirm('¿Vaciar?')) return;
+    const toDelete = currentFolder === 'Todas' ? [...notes] : notes.filter(n => n.folder === currentFolder);
+    if (currentFolder === 'Todas') notes = [];
+    else notes = notes.filter(n => n.folder !== currentFolder);
+    save();
+    toDelete.forEach(n => deleteNoteFromCloud(n.id));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   EDITOR
+════════════════════════════════════════════════════════════════ */
+function setLang(val) {
+    const note = notes.find(n => n.id === currentId); if (!note) return;
+    note.lang = val; save();
+    const LC = { html:'#e34c26',css:'#264de4',javascript:'#f7df1e',java:'#b07219',python:'#3572A5',sql:'#e38c00',json:'#40bf77',bash:'#89e051',markdown:'#083fa1' };
+    const LL = { html:'HTML',css:'CSS',javascript:'JavaScript',java:'Java',python:'Python',sql:'SQL',json:'JSON',bash:'Bash',markdown:'Markdown' };
+    Object.keys(LC).forEach(l => {
+        const btn = document.getElementById('lang-btn-' + l); if (!btn) return;
+        const a = l === val, c = LC[l];
+        btn.style.border     = `2px solid ${a ? c : 'transparent'}`;
+        btn.style.color      = a ? c : '#94a3b8';
+        btn.style.background = a ? c + '18' : 'transparent';
+    });
+    const rw = document.getElementById('run-btn-wrap');
+    if (rw) rw.innerHTML = `<button onclick="launchPreview()" style="background:#00808a;color:white;padding:6px 24px;border-radius:12px;font-size:10px;font-weight:800;text-transform:uppercase;display:flex;align-items:center;gap:6px;border:none;cursor:pointer">▶ EJECUTAR</button>`;
+    const ta = document.getElementById('html-code-editor');
+    if (ta) ta.placeholder = `Escribe tu código ${LL[val] || val} aquí...`;
+}
+
+function openEditor(id) {
+    currentId = id; activeCell = null;
+    const note = notes.find(n => n.id === id);
+    const contentArea = document.getElementById('editor-content-area');
+    const modalBody   = document.getElementById('modal-body');
+    const modalTitle  = document.getElementById('modal-title');
+
+    contentArea.className = `p-8 md:p-12 overflow-y-auto h-full ${note.color}`;
+    if (darkColors.includes(note.color)) contentArea.classList.add('dark-text-needed');
+    else contentArea.classList.remove('dark-text-needed');
+
+    modalTitle.innerText = note.title;
+    modalTitle.oninput = (e) => { note.title = e.target.innerText; save(); };
+    document.getElementById('move-to-folder').innerHTML = folders.map(f => `<option value="${f}" ${f === note.folder ? 'selected':''}>${f}</option>`).join('');
+
+    if (note.type === 'table') {
+        document.getElementById('excel-tools').classList.remove('hidden');
+        document.getElementById('image-tools').classList.add('hidden');
+        document.getElementById('fmt-tools').classList.add('hidden');
+        renderExcel(note);
+    } else if (note.type === 'html-canvas') {
+        document.getElementById('excel-tools').classList.add('hidden');
+        document.getElementById('image-tools').classList.add('hidden');
+        document.getElementById('fmt-tools').classList.add('hidden');
+        document.getElementById('txt-color-wrap').style.display = 'none';
+        if (!note.lang) note.lang = 'html';
+        const langOptions = [
+            { val:'css',        label:'CSS',        color:'#264de4', local:true  },
+            { val:'javascript', label:'JavaScript', color:'#f7df1e', local:true  },
+            { val:'python',     label:'Python',     color:'#3572A5', local:true  },
+            { val:'java',       label:'Java',       color:'#b07219', local:false },
+            { val:'sql',        label:'SQL',        color:'#e38c00', local:false },
+            { val:'json',       label:'JSON',       color:'#40bf77', local:true  },
+            { val:'bash',       label:'Bash',       color:'#89e051', local:false },
+            { val:'markdown',   label:'Markdown',   color:'#083fa1', local:true  },
+        ];
+        const currentLang = langOptions.find(l => l.val === note.lang) || langOptions[0];
+        const langBtns = langOptions.map(l => `
+            <button onclick="setLang('${l.val}')" id="lang-btn-${l.val}"
+                style="padding:5px 12px;border-radius:8px;font-size:10px;font-weight:800;text-transform:uppercase;border:2px solid ${l.val===note.lang?l.color:'transparent'};color:${l.val===note.lang?l.color:'#94a3b8'};background:${l.val===note.lang?l.color+'18':'transparent'};cursor:pointer;transition:all 0.15s;white-space:nowrap"
+                title="${l.local ? '✓ Corre localmente en tu navegador' : 'Requiere conexión a Piston'}">
+                ${l.label}${l.local ? ' <span style="font-size:8px;opacity:.6;font-weight:900">LOCAL</span>' : ''}
+            </button>`).join('');
+        const runBtn = `<button onclick="launchPreview()" style="background:#00808a;color:white;padding:6px 24px;border-radius:12px;font-size:10px;font-weight:800;text-transform:uppercase;display:flex;align-items:center;gap:6px;border:none;cursor:pointer">▶ EJECUTAR</button>`;
+
+        modalBody.innerHTML = `
+            <div class="py-10 flex flex-col items-center gap-8">
+                <div class="paper-sheet-container" id="editor-sheet">
+                    <div class="bg-slate-800 px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+                        <div class="flex items-center gap-1.5 flex-wrap" id="lang-selector">${langBtns}</div>
+                        <div id="run-btn-wrap">${runBtn}</div>
+                    </div>
+                    <textarea id="html-code-editor" class="code-textarea" placeholder="Escribe tu código ${currentLang.label} aquí..." oninput="autoExpand(this); updateContent(this.value)">${note.content}</textarea>
+                </div>
+                <div id="preview-container" class="hidden w-full max-w-[1100px] bg-white rounded-[2rem] shadow-2xl border overflow-hidden">
+                    <div class="bg-gray-100 p-4 flex justify-between"><span class="text-xs font-bold">VISTA PREVIA</span><button onclick="closePreview()" class="text-red-500 font-bold">✕</button></div>
+                    <iframe id="canvas-preview" class="w-full min-h-[700px] border-none"></iframe>
+                </div>
+            </div>`;
+        setTimeout(() => autoExpand(document.getElementById('html-code-editor')), 50);
+    } else {
+        document.getElementById('excel-tools').classList.add('hidden');
+        document.getElementById('image-tools').classList.remove('hidden');
+        document.getElementById('fmt-tools').classList.remove('hidden');
+        document.getElementById('txt-color-wrap').style.display = '';
+        modalBody.innerHTML = `<div contenteditable="true" data-placeholder="Empieza a escribir..."
+            class="outline-none min-h-[500px]"
+            style="word-wrap:break-word;overflow-wrap:break-word;"></div>`;
+        const editable = modalBody.firstChild;
+        editable.innerHTML = note.content;
+        initImageResize(editable);
+        _registerImgDropTarget(editable);   /* fix duplicado: drop mueve, no clona */
+        editable.oninput = (e) => { note.content = e.target.innerHTML; save(); };
+    }
+    document.getElementById('editor-modal').classList.add('open-modal');
+
+    // Mobile toolbar sync
+    const isMobile = window.innerWidth < 768;
+    const strip    = document.getElementById('mobile-toolbar-strip');
+    if (isMobile && strip) {
+        strip.classList.remove('strip-hidden');
+        const mobSel = document.getElementById('mobile-move-folder');
+        if (mobSel) mobSel.innerHTML = folders.map(f => `<option value="${f}" ${f===note.folder?'selected':''}>📁 ${f}</option>`).join('');
+        const excelBtns  = document.getElementById('mob-excel-btns');
+        const imageBtns  = document.getElementById('mob-image-btn');
+        const alignBtns  = document.getElementById('mob-align-btns');
+        const colorBtnM  = document.getElementById('mob-txt-color-wrap');
+        if (note.type === 'table') {
+            if(excelBtns) excelBtns.style.display='flex';
+            if(imageBtns) imageBtns.style.display='none';
+            if(alignBtns) alignBtns.style.display='none';
+            if(colorBtnM) colorBtnM.style.display='flex';
+        } else if (note.type === 'text') {
+            if(excelBtns) excelBtns.style.display='none';
+            if(imageBtns) imageBtns.style.display='flex';
+            if(alignBtns) alignBtns.style.display='flex';
+            if(colorBtnM) colorBtnM.style.display='flex';
+        } else {
+            if(excelBtns) excelBtns.style.display='none';
+            if(imageBtns) imageBtns.style.display='none';
+            if(alignBtns) alignBtns.style.display='none';
+            if(colorBtnM) colorBtnM.style.display='none';
+        }
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TABLAS (idéntico al original)
+════════════════════════════════════════════════════════════════ */
+function renderExcel(note) {
+    let html = `<div class="overflow-x-auto rounded-3xl border shadow-lg bg-white"><table class="excel-table"><thead><tr>`;
+    note.content[0].forEach((cell, c) => {
+        html += `<th contenteditable="true" class="!text-left" oninput="editCell(0, ${c}, this.innerText)">${cell}</th>`;
+    });
+    html += `</tr></thead><tbody>`;
+    note.content.slice(1).forEach((row, r) => {
+        const ri = r + 1; html += `<tr>`;
+        row.forEach((cell, c) => {
+            const color = note.cellColors[`${ri}-${c}`] || 'bg-white';
+            html += `<td class="${color} ${darkColors.includes(color)?'text-white':''}" onclick="selectCell(${ri}, ${c}, event)">
+                        <div contenteditable="true" class="cell-editor !text-left" oninput="editCell(${ri}, ${c}, this.innerHTML)">${cell}</div>
+                     </td>`;
+        });
+        html += `</tr>`;
+    });
+    document.getElementById('modal-body').innerHTML = html + `</tbody></table></div>`;
+}
+
+function selectCell(r, c, e) {
+    activeCell = { r, c };
+    document.querySelectorAll('td, th').forEach(el => el.classList.remove('selected-cell'));
+    e.currentTarget.classList.add('selected-cell');
+
+    /* Guardar _savedRange apuntando al cell-editor de esta celda,
+       para que execFmt pueda encontrarla incluso cuando el foco
+       se mueve a un botón de la toolbar.                        */
+    const ce = e.currentTarget.querySelector('.cell-editor');
+    if (ce) {
+        ce.focus();
+        const r2 = document.createRange();
+        r2.selectNodeContents(ce);
+        r2.collapse(false); /* cursor al final del contenido */
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r2);
+        _savedRange = r2.cloneRange();
+    }
+}
+
+function applyColor(colorClass) {
+    const note = notes.find(n => n.id === currentId);
+    if (note.type === 'table' && activeCell) {
+        note.cellColors[`${activeCell.r}-${activeCell.c}`] = colorClass;
+        save(); renderExcel(note);
+    } else {
+        note.color = colorClass;
+        const area = document.getElementById('editor-content-area');
+        area.className = `p-8 md:p-12 overflow-y-auto h-full ${colorClass}`;
+        if (darkColors.includes(colorClass)) area.classList.add('dark-text-needed');
+        else area.classList.remove('dark-text-needed');
+        save();
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COLOR DE LETRA · NEGRITA · ALINEACIÓN
+   ──────────────────────────────────────────────────────────────
+   _savedRange : último range dentro de un contenteditable.
+                 Se guarda en selectionchange Y en mousedown del
+                 botón de color (antes de que robe el foco).
+   _getActiveEditable() : encuentra el contenteditable correcto,
+                 ya sea la nota de texto o un div.cell-editor.
+══════════════════════════════════════════════════════════════ */
+let _savedRange  = null;
+
+/* ── Guardar el range actual si está dentro de un editable ── */
+function saveSelectionForColor() {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+        const sc = sel.getRangeAt(0).startContainer;
+        const el = sc.nodeType === Node.TEXT_NODE ? sc.parentElement : sc;
+        if (el?.closest('[contenteditable="true"]')) {
+            _savedRange = sel.getRangeAt(0).cloneRange();
+        }
+    }
+}
+
+/* ── Resolver qué contenteditable está activo en este momento ── */
+function _getActiveEditable() {
+    // 1. Desde la selección live
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+        const sc = sel.getRangeAt(0).startContainer;
+        const el = sc.nodeType === Node.TEXT_NODE ? sc.parentElement : sc;
+        const ce = el?.closest('[contenteditable="true"]');
+        if (ce) return ce;
+    }
+    // 2. Desde el range guardado
+    if (_savedRange) {
+        const sc = _savedRange.startContainer;
+        const el = sc.nodeType === Node.TEXT_NODE ? sc.parentElement : sc;
+        const ce = el?.closest('[contenteditable="true"]');
+        if (ce) return ce;
+    }
+    // 3. Fallback: primer editable en modal-body
+    return document.getElementById('modal-body')?.querySelector('[contenteditable="true"]') || null;
+}
+
+/* ── Persistir el HTML del editable activo en la nota ── */
+function _persistCurrentNote(editable) {
+    const note = notes.find(n => n.id === currentId);
+    if (!note) return;
+    if (note.type === 'text') {
+        const ed = document.getElementById('modal-body')?.querySelector('[contenteditable="true"]');
+        if (ed) { note.content = ed.innerHTML; save(); }
+    } else if (note.type === 'table' && activeCell) {
+        const ce = document.querySelector('.selected-cell .cell-editor') || editable;
+        if (ce) { note.content[activeCell.r][activeCell.c] = ce.innerHTML; save(); }
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   applyTextColor(hex)
+   ──────────────────────────────────────────────────────────────
+   CON SELECCIÓN  → execCommand('foreColor') — estándar, fiable.
+   SIN SELECCIÓN  → Inserta <span style="color:hex">​</span>
+                    con un Zero-Width Space (U+200B) y sitúa el
+                    cursor DENTRO del span (offset 1 sobre el ZWS).
+                    Chrome respeta el color de un span padre cuando
+                    se escribe dentro — el truco del ZWS ancla el
+                    estilo sin dejar un carácter visible.
+   En ambos casos se restaura _savedRange antes de actuar, porque
+   el input[type=color] roba el foco y borra la selección activa.
+══════════════════════════════════════════════════════════════ */
+function applyTextColor(hex) {
+    /* 1. Actualizar franja visual bajo la "A" */
+    ['txt-color-bar','mob-txt-color-bar'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.background = hex;
+    });
+
+    const sel      = window.getSelection();
+    const editable = _getActiveEditable();
+    if (!editable) return;
+
+    /* 2. Devolver el foco al editable y restaurar el cursor */
+    editable.focus();
+    if (_savedRange && editable.contains(_savedRange.startContainer)) {
+        try { sel.removeAllRanges(); sel.addRange(_savedRange); } catch(_) {}
+    }
+
+    /* 3. Leer el range actual DESPUÉS de restaurar */
+    const r = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+    const hasRealSelection = r && !r.collapsed
+                             && editable.contains(r.commonAncestorContainer);
+
+    if (hasRealSelection) {
+        /* ── Texto seleccionado: foreColor via execCommand ── */
+        document.execCommand('foreColor', false, hex);
+    } else {
+        /* ── Cursor sin selección: span + ZWS con Range API ──
+           NO usamos insertHTML ni execCommand porque dentro de
+           <td contenteditable> en Chrome ambos son poco fiables. */
+        const span = document.createElement('span');
+        span.style.color = hex;
+        const zws = document.createTextNode('\u200B');
+        span.appendChild(zws);
+
+        /* Posición de inserción: cursor actual o final del editable */
+        let insertAt = (r && editable.contains(r.startContainer)) ? r : null;
+        if (!insertAt) {
+            insertAt = document.createRange();
+            insertAt.selectNodeContents(editable);
+            insertAt.collapse(false);
+        }
+        insertAt.deleteContents();
+        insertAt.insertNode(span);
+
+        /* Mover cursor dentro del span, tras el ZWS */
+        const nr = document.createRange();
+        nr.setStart(zws, 1);   // offset 1 = después del U+200B
+        nr.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(nr);
+        _savedRange = nr.cloneRange(); // guardar para el próximo keystroke
+    }
+
+    _persistCurrentNote(editable);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   execFmt(cmd) — Negrita y Alineación (universal)
+   ──────────────────────────────────────────────────────────────
+   GUARD DE TIPO:
+   • Alineación bloqueada en notas tabla y canvas:
+     - tabla  → rompe el layout de las celdas
+     - canvas → el código debe permanecer como texto plano left
+   • Negrita permitida en todos los tipos (no altera estructura).
+
+   PRIORIDAD DE DETECCIÓN para alineación en tabla:
+   1. activeCell existe  → celda marcada con .selected-cell
+   2. _savedRange apunta a td/th → celda por range guardado
+   3. Ninguno → nota de texto normal
+══════════════════════════════════════════════════════════════ */
+function execFmt(cmd) {
+    const sel      = window.getSelection();
+    const isAlign  = cmd.startsWith('justify');
+
+    /* ── GUARD: alineación prohibida en tabla y canvas ── */
+    if (isAlign) {
+        const activeNote = notes.find(n => n.id === currentId);
+        if (activeNote && activeNote.type !== 'text') return;
+    }
+
+    const alignVal = { justifyLeft:'left', justifyCenter:'center',
+                       justifyRight:'right', justifyFull:'justify' }[cmd] || 'left';
+
+    /* ── 1. Detectar contexto: tabla o texto ── */
+
+    /* Caso A: hay una celda activa registrada en el estado global */
+    const inTable = !!activeCell;
+
+    /* Caso B (refuerzo): el savedRange apunta a un editor dentro de td/th */
+    let cellFromRange = null;
+    if (!inTable && _savedRange) {
+        const sc = _savedRange.startContainer;
+        const el = sc.nodeType === Node.TEXT_NODE ? sc.parentElement : sc;
+        cellFromRange = el?.closest('td, th') || null;
+    }
+
+    const isInTable = inTable || !!cellFromRange;
+
+    /* ── 2. Rama TABLA ── */
+    if (isInTable) {
+        if (isAlign) {
+            /* Encontrar la celda del DOM por dos vías */
+            let cellEl = null;
+
+            if (inTable) {
+                /* Preferencia: usar la celda visualmente marcada como selected */
+                cellEl = document.querySelector('.selected-cell');
+                /* Fallback: buscar por índice en la tabla */
+                if (!cellEl && activeCell) {
+                    const rows = document.querySelectorAll('.excel-table tr');
+                    const row  = rows[activeCell.r];
+                    if (row) cellEl = row.cells[activeCell.c] || null;
+                }
+            } else if (cellFromRange) {
+                cellEl = cellFromRange;
+            }
+
+            if (cellEl) {
+                /* Aplicar al div.cell-editor (tiene el texto) y a la <td> (hereda) */
+                const ce = cellEl.querySelector('.cell-editor') || cellEl;
+                ce.style.textAlign  = alignVal;
+                cellEl.style.textAlign = alignVal; // redundante pero garantiza herencia
+                _updateAlignButtons(alignVal);
+
+                /* Persistir: leer HTML actualizado de la celda */
+                const note = notes.find(n => n.id === currentId);
+                if (note && activeCell) {
+                    note.content[activeCell.r][activeCell.c] = ce.innerHTML;
+                    save();
+                }
+            }
+        } else {
+            /* Negrita en celda: devolver el foco al editor de la celda */
+            const ce = document.querySelector('.selected-cell .cell-editor');
+            if (ce) {
+                ce.focus();
+                if (_savedRange && ce.contains(_savedRange.startContainer)) {
+                    try { sel.removeAllRanges(); sel.addRange(_savedRange); } catch(_) {}
+                }
+                document.execCommand(cmd, false, null);
+                /* Persistir */
+                const note = notes.find(n => n.id === currentId);
+                if (note && activeCell) {
+                    note.content[activeCell.r][activeCell.c] = ce.innerHTML;
+                    save();
+                }
+            }
+        }
+        _updateFmtState();
+        return; /* salir — no tocar la lógica de texto */
+    }
+
+    /* ── 3. Rama NOTA DE TEXTO ── */
+    const editable = _getActiveEditable();
+
+    /* Restaurar foco + cursor */
+    if (editable && document.activeElement !== editable) {
+        editable.focus();
+        if (_savedRange && editable.contains(_savedRange.startContainer)) {
+            try { sel.removeAllRanges(); sel.addRange(_savedRange); } catch(_) {}
+        }
+    }
+
+    if (isAlign) {
+        /* execCommand nativo */
+        document.execCommand(cmd, false, null);
+
+        /* Fallback: si el comando no tuvo efecto, aplicar al bloque padre */
+        if (!document.queryCommandState(cmd)) {
+            const sc2  = sel.rangeCount > 0 ? sel.getRangeAt(0).startContainer : null;
+            const nd2  = sc2?.nodeType === Node.TEXT_NODE ? sc2.parentElement : sc2;
+            let block  = nd2;
+            while (block && block !== editable) {
+                if (['block','list-item','flex','grid']
+                    .includes(window.getComputedStyle(block).display)) break;
+                block = block.parentElement;
+            }
+            ((block && block !== editable) ? block : editable)
+                .style.textAlign = alignVal;
+        }
+    } else {
+        document.execCommand(cmd, false, null);
+    }
+
+    _updateFmtState();
+    if (editable) _persistCurrentNote(editable);
+}
+
+/* Actualizar estado visual (active) de Bold y botones de alineación */
+function _updateAlignButtons(alignVal) {
+    const map = { left:'alignL', center:'alignC', right:'alignR' };
+    Object.entries(map).forEach(([val, key]) => {
+        const active = val === alignVal;
+        document.getElementById('btn-' + key)?.classList.toggle('active', active);
+        document.getElementById('mob-btn-' + key)?.classList.toggle('active', active);
+    });
+}
+
+function _updateFmtState() {
+    const isBold = document.queryCommandState('bold');
+    document.getElementById('btn-bold')?.classList.toggle('active', isBold);
+    document.getElementById('mob-btn-bold')?.classList.toggle('active', isBold);
+
+    /* Si la nota activa no es de texto, limpiar todos los botones de
+       alineación sin intentar leer el estado (evita confusión visual) */
+    const activeNote = notes.find(n => n.id === currentId);
+    if (activeNote && activeNote.type !== 'text') {
+        _updateAlignButtons(''); /* ninguno activo */
+        return;
+    }
+
+    /* Para alineación: leer el estado desde el nodo actual */
+    const sel = window.getSelection();
+    const anchor = sel?.anchorNode;
+    const el = anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor;
+
+    /* Leer textAlign del bloque más cercano */
+    let detectedAlign = null;
+    if (el) {
+        let block = el;
+        const editable = block.closest?.('[contenteditable="true"]');
+        while (block && block !== editable) {
+            const ta = block.style?.textAlign || window.getComputedStyle(block).textAlign;
+            if (ta && ta !== 'start' && ta !== '') { detectedAlign = ta; break; }
+            block = block.parentElement;
+        }
+        if (!detectedAlign && editable) {
+            detectedAlign = window.getComputedStyle(editable).textAlign;
+        }
+    }
+
+    /* Fallback a execCommand state */
+    if (!detectedAlign) {
+        if (document.queryCommandState('justifyCenter'))     detectedAlign = 'center';
+        else if (document.queryCommandState('justifyRight')) detectedAlign = 'right';
+        else detectedAlign = 'left';
+    }
+
+    _updateAlignButtons(detectedAlign);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   GUARDAR SELECCIÓN CONTINUAMENTE
+   ──────────────────────────────────────────────────────────────
+   selectionchange se dispara cada vez que el cursor se mueve.
+   Guardamos _savedRange SIEMPRE que el cursor esté en un editable
+   (incluso colapsado) para que applyTextColor tenga siempre la
+   posición correcta aunque el input[type=color] robe el foco.
+══════════════════════════════════════════════════════════════ */
+document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const sc = sel.getRangeAt(0).startContainer;
+    const el = sc.nodeType === Node.TEXT_NODE ? sc.parentElement : sc;
+    if (el?.closest('[contenteditable="true"]')) {
+        _savedRange = sel.getRangeAt(0).cloneRange();
+        _updateFmtState();
+    }
+});
+
+function editCell(r, c, v)  { notes.find(n => n.id === currentId).content[r][c] = v; save(); }
+function updateContent(v)   { notes.find(n => n.id === currentId).content = v; save(); }
+function autoExpand(t)      { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+function addRow()           { const n = notes.find(n=>n.id===currentId); n.content.push(new Array(n.content[0].length).fill('')); save(); renderExcel(n); }
+function addCol()           { const n = notes.find(n=>n.id===currentId); n.content.forEach(r => r.push('')); save(); renderExcel(n); }
+function paintColumn() {
+    if (!activeCell) return;
+    const note  = notes.find(n => n.id === currentId);
+    const color = note.cellColors[`${activeCell.r}-${activeCell.c}`] || 'bg-white';
+    note.content.forEach((_, r) => { if (r > 0) note.cellColors[`${r}-${activeCell.c}`] = color; });
+    save(); renderExcel(note);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PISTON API  (reemplaza Judge0)
+   ────────────────────────────────────────────────────────────
+   Endpoint: https://emkc.org/api/v2/piston/execute
+   Respuesta: { run: { stdout, stderr, code }, compile: { stderr } }
+════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+   EJECUCIÓN DE CÓDIGO
+   ────────────────────────────────────────────────────────────
+   • HTML / CSS    → iframe del navegador       (local, instantáneo)
+   • JavaScript    → Web Worker aislado         (local, sin API)
+   • Python        → Pyodide (CPython en WASM)  (local, sin API)
+   • JSON/Markdown → formateador local          (local, sin API)
+   • Resto         → Piston API + botón reintentar si falla
+════════════════════════════════════════════════════════════════ */
+
+/* ── Pyodide — Python en el navegador ──────────────────────────
+   Se carga desde CDN solo la primera vez que el usuario ejecuta
+   código Python. Las veces siguientes ya está en memoria.       */
+let _pyodide        = null;   /* instancia cacheada               */
+let _pyodideLoading = false;  /* evitar cargas simultáneas        */
+const PYODIDE_CDN   = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js';
+
+async function getPyodide() {
+    if (_pyodide) return _pyodide;
+    if (_pyodideLoading) {
+        /* Esperar a que termine la carga en curso */
+        while (_pyodideLoading) await new Promise(r => setTimeout(r, 100));
+        return _pyodide;
+    }
+    _pyodideLoading = true;
+    /* Cargar el script de Pyodide en el documento si no está ya */
+    if (!window.loadPyodide) {
+        await new Promise((resolve, reject) => {
+            const s   = document.createElement('script');
+            s.src     = PYODIDE_CDN;
+            s.onload  = resolve;
+            s.onerror = () => reject(new Error('No se pudo cargar Pyodide desde el CDN.'));
+            document.head.appendChild(s);
+        });
+    }
+    _pyodide = await window.loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/',
+    });
+    _pyodideLoading = false;
+    return _pyodide;
+}
+
+async function runPythonWithPyodide(code) {
+    const py     = await getPyodide();
+    const lines  = [];
+    const push   = (type, text) => lines.push({ type, text: String(text) });
+
+    /* Redirigir stdout/stderr de Python a nuestro array */
+    py.runPython(`
+import sys, io
+_limit_stdout = io.StringIO()
+_limit_stderr = io.StringIO()
+sys.stdout = _limit_stdout
+sys.stderr = _limit_stderr
+`);
+
+    let error = null;
+    try {
+        py.runPython(code);
+    } catch(e) {
+        error = e.message || String(e);
+    }
+
+    /* Leer lo que Python imprimió */
+    const stdout = py.runPython('_limit_stdout.getvalue()');
+    const stderr = py.runPython('_limit_stderr.getvalue()');
+
+    /* Restaurar stdout/stderr originales */
+    py.runPython('sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__');
+
+    if (stdout) stdout.split('\n').filter(Boolean).forEach(l => push('log', l));
+    if (error)  push('error', error);
+    if (stderr) stderr.split('\n').filter(Boolean).forEach(l => push('error', l));
+
+    return lines;
+}
+
+/* ── JavaScript — Web Worker aislado ───────────────────────────
+   Sin window, sin document, sin supabase. Captura console.*    */
+function runJavaScriptInWorker(code) {
+    return new Promise(resolve => {
+        const lines = [];
+        const workerSrc = `
+self.console = {
+    log:   (...a) => postMessage({ type:'log',   text: a.map(x => typeof x === 'object' ? JSON.stringify(x,null,2) : String(x)).join(' ') }),
+    error: (...a) => postMessage({ type:'error', text: a.join(' ') }),
+    warn:  (...a) => postMessage({ type:'warn',  text: a.join(' ') }),
+    info:  (...a) => postMessage({ type:'log',   text: a.join(' ') }),
+};
+try { ${code} } catch(e) { postMessage({ type:'error', text: e.message }); }
+postMessage({ type:'done' });
+`;
+        const blob   = new Blob([workerSrc], { type: 'application/javascript' });
+        const blobURL = URL.createObjectURL(blob);
+        const worker = new Worker(blobURL);
+        const timeout = setTimeout(() => {
+            worker.terminate(); URL.revokeObjectURL(blobURL);
+            resolve({ lines, timedOut: true });
+        }, 10000);
+
+        worker.onmessage = e => {
+            const { type, text } = e.data;
+            if (type === 'done') {
+                clearTimeout(timeout); worker.terminate(); URL.revokeObjectURL(blobURL);
+                resolve({ lines, timedOut: false });
+            } else { lines.push({ type, text }); }
+        };
+        worker.onerror = err => {
+            clearTimeout(timeout); worker.terminate(); URL.revokeObjectURL(blobURL);
+            lines.push({ type:'error', text: err.message || 'Error desconocido' });
+            resolve({ lines, timedOut: false });
+        };
+    });
+}
+
+/* ── Piston — lenguajes compilados (con reintentar) ────────────*/
+const PISTON_VERSIONS = {
+    java:'15.0.2', bash:'5.2.0', typescript:'5.0.3', lua:'5.4.4',
+    ruby:'3.0.1',  c:'10.2.0',  cpp:'10.2.0',         rust:'1.68.2',
+    go:'1.16.2',   php:'8.2.3', csharp:'6.12.0',      kotlin:'1.8.20',
+    swift:'5.3.3', r:'4.1.1',
+};
+const PISTON_FILENAMES = {
+    java:'Main.java', bash:'main.sh', typescript:'index.ts', lua:'main.lua',
+    ruby:'main.rb', c:'main.c', cpp:'main.cpp', rust:'main.rs', go:'main.go',
+    php:'main.php', csharp:'main.cs', kotlin:'main.kt', swift:'main.swift', r:'main.r',
+};
+
+const BROWSER_LANGS   = ['html', 'css'];
+const DISPLAY_ONLY    = ['json', 'markdown'];
+const LOCAL_LANGS     = ['javascript', 'python'];
+const PISTON_LANGS    = Object.keys(PISTON_VERSIONS);
+
+/* ── Piston — reintento automático con proxy allorigins ────────
+   Intento 1: emkc.org directo (sin proxy, más rápido)
+   Intento 2: allorigins como proxy CORS si el primero da 401/403
+   JSON.parse explícito en el proxy para detectar respuestas basura.
+   Devuelve el resultado de Piston o lanza error etiquetado.       */
+async function pistonExecute(lang, code) {
+    const ver   = PISTON_VERSIONS[lang];
+    if (!ver) throw new Error(`"${lang}" no soportado.`);
+    const fname = PISTON_FILENAMES[lang] || 'main.txt';
+
+    const pistonDirect = 'https://emkc.org/api/v2/piston/execute';
+    const pistonProxy  = 'https://api.allorigins.win/raw?url='
+                         + encodeURIComponent(pistonDirect);
+
+    const body = JSON.stringify({
+        language: lang, version: ver,
+        files: [{ name: fname, content: code }],
+    });
+
+    /* ── helper: un intento con timeout ── */
+    async function attempt(url, timeoutMs) {
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+            const res = await fetch(url, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+                signal:  ctrl.signal,
+            });
+            clearTimeout(timer);
+
+            if (res.status === 429) throw new Error('rate_limit');
+
+            /* Bloqueo explícito de 401/403 → señal de fallo recuperable */
+            if (res.status === 401 || res.status === 403) {
+                throw new Error(`blocked_${res.status}`);
+            }
+            if (!res.ok) throw new Error(`http_${res.status}`);
+
+            /* Leer el texto y hacer JSON.parse limpio.
+               Si el proxy devuelve HTML de error, lo detectamos aquí. */
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch(_) {
+                console.warn('[LIMIT] Respuesta no-JSON del proxy:', text.slice(0, 120));
+                throw new Error('proxy_garbage');
+            }
+            return data;
+
+        } catch(e) {
+            clearTimeout(timer);
+            if (e.name === 'AbortError') throw new Error('timeout');
+            throw e;
+        }
+    }
+
+    /* ── Intento 1: directo a emkc.org ── */
+    try {
+        return await attempt(pistonDirect, 18000);
+    } catch(e1) {
+        const recoverable = ['blocked_401','blocked_403','timeout','proxy_garbage']
+                            .some(tag => e1.message.startsWith(tag))
+                            || e1.message.includes('Failed to fetch')
+                            || e1.message.includes('NetworkError');
+
+        if (e1.message === 'rate_limit') throw e1; /* no reintentar en 429 */
+
+        if (!recoverable) throw e1;
+
+        /* ── Intento 2: proxy allorigins (automático, sin intervención del usuario) ── */
+        console.info('[LIMIT] Piston directo falló (' + e1.message + '). Reintentando con proxy…');
+        try {
+            return await attempt(pistonProxy, 22000);
+        } catch(e2) {
+            if (e2.message === 'proxy_garbage') {
+                throw new Error('proxy_garbage'); /* mensaje amable manejado en launchPreview */
+            }
+            /* Ambos intentos fallaron */
+            throw new Error('all_failed:' + e2.message);
+        }
+    }
+}
+
+/* ── Renderizar salida estilo terminal ──────────────────────── */
+function renderTerminalOutput({ lines = [], timedOut = false, lang = '' }) {
+    const colorMap = { log:'#10b981', error:'#ef4444', warn:'#f59e0b' };
+    const isEmpty  = lines.length === 0 && !timedOut;
+    return `<style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{background:#0f172a;font-family:'Fira Code',monospace;font-size:14px;padding:28px;min-height:100vh;line-height:1.75}
+        .line{padding:2px 0;white-space:pre-wrap;border-bottom:1px solid rgba(255,255,255,.03)}
+        .empty{color:#475569;font-style:italic}
+        .badge{display:inline-block;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;margin-bottom:18px;letter-spacing:.06em;background:rgba(0,128,138,.15);color:#00808a}
+        .timeout{color:#f59e0b;font-weight:bold;margin-top:14px}
+    </style>
+    <div class="badge">${lang.toUpperCase()} · Local ✓</div><br>
+    ${isEmpty ? '<span class="empty">Sin salida (el código no llamó a print / console.log)</span>' : ''}
+    ${lines.map(l => `<div class="line" style="color:${colorMap[l.type]||'#10b981'}">${l.type==='error'?'✗ ':l.type==='warn'?'⚠ ':''}${escHtml(l.text)}</div>`).join('')}
+    ${timedOut ? '<p class="timeout">⏱ Tiempo agotado (10 s)</p>' : ''}`;
+}
+
+async function launchPreview() {
+    const note = notes.find(n => n.id === currentId);
+    const lang = note?.lang || 'html';
+    const code = document.getElementById('html-code-editor').value.trim();
+    if (!code) return;
+
+    const previewContainer = document.getElementById('preview-container');
+    const editorSheet      = document.getElementById('editor-sheet');
+
+    const showIframe = (html) => {
+        previewContainer.classList.remove('hidden'); editorSheet.classList.add('hidden');
+        const doc = document.getElementById('canvas-preview').contentDocument;
+        doc.open(); doc.write(html); doc.close();
+    };
+
+    /* ── HTML / CSS → iframe del navegador ── */
+    if (BROWSER_LANGS.includes(lang)) {
+        updatePreviewHeader('Vista previa');
+        showIframe(lang === 'css'
+            ? `<style>${code}</style><p style="padding:20px;font-family:sans-serif;color:#64748b">← CSS aplicado</p>`
+            : `<script src="https://cdn.tailwindcss.com"><\/script><style>body{padding:40px;text-align:left}</style>${code}`);
+        return;
+    }
+
+    /* ── JSON / Markdown → formatear ── */
+    if (DISPLAY_ONLY.includes(lang)) {
+        updatePreviewHeader(lang === 'markdown' ? 'Vista Markdown' : 'JSON formateado');
+        if (lang === 'json') {
+            let pretty = code; try { pretty = JSON.stringify(JSON.parse(code), null, 2); } catch(_) {}
+            showIframe(`<pre style="padding:30px;font-family:monospace;font-size:14px;background:#0f172a;color:#10b981;min-height:100vh;margin:0;white-space:pre-wrap">${escHtml(pretty)}</pre>`);
+        } else {
+            const html = code
+                .replace(/^### (.+)/gm,'<h3>$1</h3>').replace(/^## (.+)/gm,'<h2>$1</h2>').replace(/^# (.+)/gm,'<h1>$1</h1>')
+                .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')
+                .replace(/`(.+?)`/g,'<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">$1</code>').replace(/\n/g,'<br>');
+            showIframe(`<div style="padding:40px;font-family:system-ui;line-height:1.7;max-width:800px">${html}</div>`);
+        }
+        return;
+    }
+
+    /* ── PYTHON → Pyodide (CPython en WASM, 100% local) ── */
+    if (lang === 'python') {
+        showSpinner('Cargando Python (Pyodide)… primera vez puede tardar ~5 s');
+        try {
+            const lines = await runPythonWithPyodide(code);
+            updatePreviewHeader('Python · Pyodide ✓');
+            showIframe(renderTerminalOutput({ lines, lang: 'python' }));
+        } catch(err) {
+            updatePreviewHeader('Python · Error');
+            showIframe(`<div style="padding:30px;font-family:system-ui;background:#0f172a;min-height:100vh">
+                <p style="color:#ef4444;font-weight:700;margin-bottom:10px">Error al ejecutar Python</p>
+                <p style="color:#94a3b8;font-size:13px;white-space:pre-wrap">${escHtml(err.message)}</p>
+            </div>`);
+        } finally { hideSpinner(); }
+        return;
+    }
+
+    /* ── JAVASCRIPT → Web Worker aislado ── */
+    if (lang === 'javascript') {
+        showSpinner('Ejecutando JavaScript…');
+        const { lines, timedOut } = await runJavaScriptInWorker(code);
+        hideSpinner();
+        updatePreviewHeader('JavaScript · Worker ✓');
+        showIframe(renderTerminalOutput({ lines, timedOut, lang: 'javascript' }));
+        return;
+    }
+
+    /* ── RESTO → Piston + botón Reintentar ── */
+    if (!PISTON_LANGS.includes(lang)) {
+        alert(`Ejecución de "${lang}" no soportada aún.`); return;
+    }
+
+    showSpinner(`Compilando ${lang.toUpperCase()} con Piston…`);
+    try {
+        const result   = await pistonExecute(lang, code);
+        const run      = result.run     || {};
+        const compile  = result.compile || {};
+        const stdout   = run.stdout     || '';
+        const stderr   = (run.stderr || '') + (compile.stderr || '') + (compile.output || '');
+        const exitCode = run.code ?? 0;
+        const success  = exitCode === 0 && !stderr.trim();
+        const badge    = success ? '✓ OK' : `✗ Exit ${exitCode}`;
+
+        updatePreviewHeader(`${lang.toUpperCase()} · ${success ? 'OK' : 'Error'}`);
+        showIframe(`<style>
+            *{box-sizing:border-box;margin:0;padding:0}
+            body{background:#0f172a;font-family:'Fira Code',monospace;font-size:14px;padding:28px;min-height:100vh}
+            .badge{display:inline-block;font-size:10px;font-weight:700;padding:4px 12px;border-radius:6px;margin-bottom:16px;letter-spacing:.08em}
+            .ok{background:rgba(0,128,138,.15);color:#00808a} .err{background:rgba(239,68,68,.15);color:#ef4444}
+            .out{color:#10b981;white-space:pre-wrap;line-height:1.7}
+            .errout{color:#ef4444;white-space:pre-wrap;line-height:1.7;margin-top:16px;border-top:1px solid rgba(239,68,68,.3);padding-top:16px}
+            .empty{color:#475569;font-style:italic}
+        </style>
+        <span class="badge ${success?'ok':'err'}">${escHtml(badge)}</span>
+        ${stdout ? `<div class="out">${escHtml(stdout)}</div>` : '<div class="empty">Sin salida estándar</div>'}
+        ${stderr ? `<div class="errout">${escHtml(stderr)}</div>` : ''}`);
+
+    } catch(err) {
+        const isRate    = err.message === 'rate_limit' || err.message.includes('429');
+        const isGarbage = err.message === 'proxy_garbage';
+        const isJava    = lang === 'java';
+        updatePreviewHeader(isRate ? '⏱ Rate limit' : '⚙ Servidor ocupado');
+
+        /* ── Snippets de IDE por lenguaje para cuando todo falla ── */
+        const ideLinks = {
+            java:       { name: 'IntelliJ / Eclipse',  url: 'https://onecompiler.com/java'       },
+            cpp:        { name: 'CLion / VS Code',      url: 'https://onecompiler.com/cpp'        },
+            c:          { name: 'GCC / VS Code',        url: 'https://onecompiler.com/c'          },
+            bash:       { name: 'Terminal local',       url: 'https://onecompiler.com/bash'       },
+            typescript: { name: 'VS Code + ts-node',   url: 'https://onecompiler.com/typescript' },
+            lua:        { name: 'Lua local',            url: 'https://onecompiler.com/lua'        },
+            ruby:       { name: 'irb local',            url: 'https://onecompiler.com/ruby'       },
+            rust:       { name: 'cargo run',            url: 'https://onecompiler.com/rust'       },
+            go:         { name: 'go run',               url: 'https://onecompiler.com/go'         },
+            php:        { name: 'php -f',               url: 'https://onecompiler.com/php'        },
+            csharp:     { name: 'dotnet run',           url: 'https://onecompiler.com/csharp'     },
+            kotlin:     { name: 'kotlinc',              url: 'https://onecompiler.com/kotlin'     },
+        };
+        const ide = ideLinks[lang] || { name: 'IDE local', url: 'https://onecompiler.com/' };
+
+        /* Snippet inline para Java (el más popular de los compilados) */
+        const javaSnippet = isJava ? `
+        <div style="margin-top:20px;background:#0f172a;border-radius:12px;padding:16px 20px;text-align:left">
+            <p style="color:#475569;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Tu código listo para copiar:</p>
+            <pre style="color:#10b981;font-family:'Fira Code',monospace;font-size:12px;white-space:pre-wrap;overflow-x:auto;margin:0">${escHtml(code)}</pre>
+        </div>` : '';
+
+        showIframe(`<style>
+            *{box-sizing:border-box;margin:0;padding:0}
+            body{background:#0f172a;font-family:system-ui,sans-serif;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px}
+            .card{background:#1e293b;border-radius:16px;padding:32px 36px;max-width:520px;width:100%;text-align:center}
+            .ico{font-size:34px;margin-bottom:12px}
+            .ttl{color:#f1f5f9;font-size:16px;font-weight:700;margin-bottom:10px}
+            .msg{color:#94a3b8;font-size:13px;line-height:1.75;margin-bottom:20px}
+            .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+            .btn-retry{background:#00808a;color:white;border:none;border-radius:10px;padding:10px 22px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;cursor:pointer;transition:background .2s}
+            .btn-retry:hover{background:#006d75}
+            .btn-ide{background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:10px;padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;display:inline-block}
+            .btn-ide:hover{border-color:#00808a;color:#00808a}
+            .err-detail{color:#334155;font-size:11px;font-family:monospace;margin-top:12px}
+        </style>
+        <div class="card">
+            <div class="ico">${isRate ? '⏱️' : isGarbage ? '🔌' : '⚙️'}</div>
+            <p class="ttl">${
+                isRate    ? 'Demasiadas peticiones seguidas'
+              : isGarbage ? 'El proxy devolvió una respuesta inválida'
+              : 'Servidor externo ocupado'
+            }</p>
+            <p class="msg">${
+                isRate
+                ? 'Espera unos segundos e inténtalo de nuevo.'
+                : isGarbage
+                ? 'El proxy intermediario devolvió datos corruptos. Inténtalo de nuevo en unos segundos.'
+                : `Piston no respondió tras dos intentos automáticos.<br>
+                   Puedes copiar tu código y probarlo en <strong style="color:#f1f5f9">${ide.name}</strong> mientras tanto.`
+            }</p>
+            <div class="btns">
+                <button class="btn-retry" onclick="parent.launchPreview()">↺ Reintentar automático</button>
+                <a class="btn-ide" href="${ide.url}" target="_blank">Abrir en ${ide.name} →</a>
+            </div>
+            ${javaSnippet}
+            <p class="err-detail">${escHtml(err.message)}</p>
+        </div>`);
+
+    } finally {
+        hideSpinner();
+    }
+}
+
+function updatePreviewHeader(label) {
+    const header = document.querySelector('#preview-container > div:first-child span');
+    if (header) header.textContent = label;
+}
+function closePreview() {
+    document.getElementById('preview-container').classList.add('hidden');
+    document.getElementById('editor-sheet').classList.remove('hidden');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SISTEMA DE DESCARGA (idéntico al original)
+════════════════════════════════════════════════════════════════ */
+function toggleDownloadMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('download-menu');
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isOpen = menu.style.pointerEvents === 'all';
+    if (isOpen) {
+        menu.style.opacity = '0'; menu.style.transform = 'translateY(-8px) scale(0.97)'; menu.style.pointerEvents = 'none';
+    } else {
+        menu.style.top = (rect.bottom + 8) + 'px'; menu.style.right = (window.innerWidth - rect.right) + 'px';
+        menu.style.opacity = '1'; menu.style.transform = 'translateY(0) scale(1)'; menu.style.pointerEvents = 'all';
+    }
+}
+
+function showSpinner(msg) { document.getElementById('spinner-label').textContent = msg || 'Generando archivo...'; document.getElementById('download-spinner').classList.add('show'); }
+function hideSpinner()    { document.getElementById('download-spinner').classList.remove('show'); }
+function escHtml(str)     { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function getFileName() {
+    const note = notes.find(n => n.id === currentId);
+    return (note?.title || 'nota').replace(/[^a-z0-9áéíóúñ ]/gi, '').trim().replace(/\s+/g, '_') || 'nota';
+}
+
+function buildCleanContent() {
+    const note  = notes.find(n => n.id === currentId);
+    const title = document.getElementById('modal-title').innerText.trim();
+    if (note.type === 'table') {
+        const rows = note.content;
+        let html = `<table border="1" cellpadding="10" style="border-collapse:collapse;width:100%;font-family:sans-serif">`;
+        html += `<thead><tr>${rows[0].map(c=>`<th style="background:#f1f5f9;font-weight:700;text-align:left">${c}</th>`).join('')}</tr></thead>`;
+        html += `<tbody>${rows.slice(1).map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        return { title, bodyHtml: html, bodyText: rows.map(r=>r.join('\t')).join('\n') };
+    } else if (note.type === 'html-canvas') {
+        return { title, bodyHtml: `<pre style="font-family:monospace;white-space:pre-wrap">${escHtml(note.content)}</pre>`, bodyText: note.content };
+    } else {
+        const editable = document.getElementById('modal-body').querySelector('[contenteditable="true"]');
+        const clone = editable ? editable.cloneNode(true) : document.createElement('div');
+        clone.querySelectorAll('.img-resize-wrapper').forEach(wrapper => {
+            const img = wrapper.querySelector('img');
+            if (img) { const ci = img.cloneNode(false); ci.removeAttribute('tabindex'); wrapper.replaceWith(ci); } else wrapper.remove();
+        });
+        clone.querySelectorAll('.resize-handle, .size-label').forEach(el => el.remove());
+        return { title, bodyHtml: clone.innerHTML, bodyText: clone.innerText || clone.textContent };
+    }
+}
+
+async function downloadNote(format) {
+    const note = notes.find(n => n.id === currentId), filename = getFileName();
+    const { title, bodyHtml } = buildCleanContent();
+    const colorMap = { 'bg-white':'#ffffff','bg-yellow-300':'#fde047','bg-orange-500':'#ff6b00','bg-red-500':'#ef4444','bg-pink-400':'#f472b6','bg-teal-400':'#2dd4bf','bg-lime-400':'#a3e635','bg-purple-800':'#6b21a8','bg-blue-950':'#0a2540','bg-slate-700':'#334155','bg-emerald-900':'#064e3b','bg-amber-900':'#78350f' };
+    const bgColor = colorMap[note.color] || '#ffffff';
+    const textColor = darkColors.includes(note.color) ? '#ffffff' : '#0a2540';
+    if (format === 'html') {
+        showSpinner('Generando HTML...');
+        triggerDownload(URL.createObjectURL(new Blob([buildStandaloneHtml(title, bodyHtml, bgColor, textColor)], { type:'text/html;charset=utf-8' })), filename+'.html');
+        hideSpinner();
+    } else if (format === 'md') {
+        showSpinner('Generando Markdown...');
+        triggerDownload(URL.createObjectURL(new Blob([htmlToMarkdown(title, bodyHtml, note)], { type:'text/markdown;charset=utf-8' })), filename+'.md');
+        hideSpinner();
+    } else if (format === 'png') {
+        showSpinner('Generando imagen...'); await downloadAsPng(title, bodyHtml, bgColor, textColor, filename); hideSpinner();
+    } else if (format === 'pdf') {
+        showSpinner('Generando PDF...'); await downloadAsPdf(title, bodyHtml, bgColor, textColor, filename); hideSpinner();
+    }
+}
+
+function buildStandaloneHtml(title, body, bg, fg) {
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title||'Nota'}</title>
+<style>body{margin:0;padding:48px;background:${bg};color:${fg};font-family:system-ui,sans-serif;line-height:1.7}h1{font-size:2.5rem;font-weight:900;border-left:10px solid #00808a;padding-left:20px;margin-bottom:2rem}img{max-width:100%;border-radius:12px;margin:1rem 0}table{border-collapse:collapse;width:100%}td,th{border:1px solid rgba(0,0,0,0.12);padding:12px;text-align:left}th{background:rgba(0,0,0,0.05);font-weight:700}.meta{font-size:11px;opacity:.5;margin-bottom:2rem;text-transform:uppercase;font-weight:700;letter-spacing:.08em}</style>
+</head><body><p class="meta">Exportado desde LIMIT · ${new Date().toLocaleDateString('es-CO')}</p><h1>${title||'Sin título'}</h1><div>${body}</div></body></html>`;
+}
+
+function htmlToMarkdown(title, bodyHtml, note) {
+    let md = `# ${title||'Sin título'}\n\n> Exportado desde LIMIT · ${new Date().toLocaleDateString('es-CO')}\n\n`;
+    if (note.type === 'table') {
+        const rows = note.content;
+        if (rows.length > 0) { md += '| '+rows[0].join(' | ')+' |\n'; md += '| '+rows[0].map(()=>'---').join(' | ')+' |\n'; rows.slice(1).forEach(r => { md += '| '+r.join(' | ')+' |\n'; }); }
+    } else if (note.type === 'html-canvas') { md += '```\n'+note.content+'\n```\n'; }
+    else { const tmp = document.createElement('div'); tmp.innerHTML = bodyHtml; md += nodeToMd(tmp).trim(); }
+    return md;
+}
+
+function nodeToMd(node) {
+    let out = '';
+    node.childNodes.forEach(child => {
+        if (child.nodeType === 3) { out += child.textContent; }
+        else if (child.nodeType === 1) {
+            const tag = child.tagName.toLowerCase(), inner = nodeToMd(child);
+            if (tag === 'br') out += '\n';
+            else if (tag === 'b' || tag === 'strong') out += `**${inner}**`;
+            else if (tag === 'i' || tag === 'em')     out += `*${inner}*`;
+            else if (tag === 'h1') out += `\n# ${inner}\n`;
+            else if (tag === 'h2') out += `\n## ${inner}\n`;
+            else if (tag === 'h3') out += `\n### ${inner}\n`;
+            else if (tag === 'p')  out += `\n${inner}\n`;
+            else if (tag === 'li') out += `\n- ${inner}`;
+            else if (tag === 'img') { const src = child.src||''; out += `\n![${child.alt||'imagen'}](${src.startsWith('data:')?'[imagen_base64]':src})\n`; }
+            else out += inner;
+        }
+    });
+    return out;
+}
+
+async function downloadAsPng(title, bodyHtml, bg, fg, filename) {
+    const html = buildStandaloneHtml(title, bodyHtml, bg, fg);
+    return new Promise(resolve => {
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;height:1200px;border:none;visibility:hidden;';
+        document.body.appendChild(iframe);
+        const doc = iframe.contentDocument; doc.open(); doc.write(html); doc.close();
+        setTimeout(() => {
+            try {
+                if (typeof html2canvas !== 'undefined') {
+                    html2canvas(iframe.contentDocument.body, { scale:2, backgroundColor:bg, useCORS:true }).then(canvas => {
+                        triggerDownload(canvas.toDataURL('image/png'), filename+'.png');
+                        document.body.removeChild(iframe); resolve();
+                    });
+                } else {
+                    document.body.removeChild(iframe);
+                    const win = window.open('','_blank');
+                    win.document.write(buildStandaloneHtml(title, bodyHtml, bg, fg));
+                    win.document.write('<script>window.onload=()=>{window.print()}<\/script>');
+                    win.document.close(); resolve();
+                }
+            } catch(_) {
+                document.body.removeChild(iframe);
+                const win = window.open('','_blank');
+                if (win) { win.document.write(buildStandaloneHtml(title,bodyHtml,bg,fg)); win.document.close(); }
+                resolve();
+            }
+        }, 600);
+    });
+}
+
+async function downloadAsPdf(title, bodyHtml, bg, fg, filename) {
+    return new Promise(resolve => {
+        const printHtml = buildStandaloneHtml(title, bodyHtml, bg, fg)
+            .replace('</style>','@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style>')
+            + `<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>`;
+        const win = window.open('','_blank');
+        if (win) { win.document.open(); win.document.write(printHtml); win.document.close(); }
+        setTimeout(resolve, 800);
+    });
+}
+
+function triggerDownload(url, name) {
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   JIJI — Tributo
+   Fiel al Jiji de la izquierda: negro azul noche #0d0d1e,
+   orejas largas con interior violeta #6040a4, ojos blancos
+   grandes con pupila descentrada (expresión seria/cautelosa),
+   lazo rojo voluminoso de dos alas, cola larga y elegante.
+════════════════════════════════════════════════════════════════ */
+function jijiEmptySVG() {
+    return `<div class="jiji-empty">
+        <div class="jiji-wrap">
+            <svg viewBox="0 0 200 285" xmlns="http://www.w3.org/2000/svg" style="width:155px;height:auto">
+
+                <!-- sombra base -->
+                <ellipse cx="100" cy="280" rx="52" ry="6" fill="rgba(0,0,0,0.07)"/>
+
+                <!-- COLA — larga, elegante, curva hacia arriba -->
+                <path d="M148 255 Q188 230 184 182 Q180 148 160 158 Q149 165 158 174"
+                      stroke="#0d0d1e" stroke-width="14" fill="none" stroke-linecap="round"/>
+                <circle cx="158" cy="174" r="8" fill="#0d0d1e"/>
+
+                <!-- CUERPO — silueta sentada, esbelto -->
+                <path d="M52 272 Q46 228 58 200 Q70 176 100 169 Q130 176 142 200 Q154 228 148 272 Z"
+                      fill="#0d0d1e"/>
+                <ellipse cx="100" cy="268" rx="50" ry="14" fill="#0d0d1e"/>
+
+                <!-- patas delanteras -->
+                <ellipse cx="78"  cy="275" rx="22" ry="12" fill="#0d0d1e"/>
+                <ellipse cx="122" cy="275" rx="22" ry="12" fill="#0d0d1e"/>
+
+                <!-- CUELLO -->
+                <path d="M82 165 Q100 158 118 165 L116 184 Q100 178 84 184 Z" fill="#0d0d1e"/>
+
+                <!-- CABEZA -->
+                <ellipse cx="100" cy="118" rx="58" ry="56" fill="#0d0d1e"/>
+
+                <!-- OREJAS — muy largas y puntiagudas, interior violeta -->
+                <polygon points="64,100 44,20 90,80"    fill="#0d0d1e"/>
+                <polygon points="67,94  52,28  87,76"   fill="#6040a4" opacity="0.88"/>
+                <polygon points="136,100 156,20 110,80" fill="#0d0d1e"/>
+                <polygon points="133,94  148,28 113,76" fill="#6040a4" opacity="0.88"/>
+
+                <!-- OJOS — blancos grandes, mirada seria
+                     Pupilas descentradas +6px hacia el interior:
+                     exactamente la expresión cautelosa del Jiji original -->
+                <ellipse cx="82"  cy="114" rx="19" ry="21" fill="white"/>
+                <ellipse cx="88"  cy="116" rx="11" ry="16" fill="#0d0d1e"/>
+                <circle  cx="82"  cy="107" r="2.5"  fill="white" opacity="0.35"/>
+
+                <ellipse cx="118" cy="114" rx="19" ry="21" fill="white"/>
+                <ellipse cx="124" cy="116" rx="11" ry="16" fill="#0d0d1e"/>
+                <circle  cx="118" cy="107" r="2.5"  fill="white" opacity="0.35"/>
+
+                <!-- NARIZ Y BOCA seria, cerrada -->
+                <path d="M97 133 L100 138 L103 133 Z" fill="#c07070"/>
+                <path d="M100 138 Q95 143 91 141" stroke="#906060" stroke-width="1.3"
+                      fill="none" stroke-linecap="round"/>
+                <path d="M100 138 Q105 143 109 141" stroke="#906060" stroke-width="1.3"
+                      fill="none" stroke-linecap="round"/>
+
+                <!-- BIGOTES — finos, sutiles -->
+                <line x1="80"  y1="133" x2="48"  y2="128" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+                <line x1="80"  y1="138" x2="48"  y2="138" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+                <line x1="80"  y1="143" x2="48"  y2="148" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+                <line x1="120" y1="133" x2="152" y2="128" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+                <line x1="120" y1="138" x2="152" y2="138" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+                <line x1="120" y1="143" x2="152" y2="148" stroke="rgba(210,210,228,0.50)" stroke-width="1.2" stroke-linecap="round"/>
+
+                <!-- LAZO ROJO — elemento crítico
+                     Tres capas por ala dan el volumen del original:
+                     base roja · sombra oscura · toque de luz -->
+
+                <!-- ala izquierda -->
+                <path d="M66 176 C70 160 84 156 100 165 C88 175 74 182 66 176 Z" fill="#c01616"/>
+                <path d="M70 177 C74 162 86 159 99 167 C88 175 75 181 70 177 Z" fill="#8a0c0c" opacity="0.68"/>
+                <path d="M74 170 C78 161 87 159 97 164 C88 169 78 172 74 170 Z" fill="#d42020" opacity="0.30"/>
+
+                <!-- ala derecha -->
+                <path d="M134 176 C130 160 116 156 100 165 C112 175 126 182 134 176 Z" fill="#c01616"/>
+                <path d="M130 177 C126 162 114 159 101 167 C112 175 125 181 130 177 Z" fill="#8a0c0c" opacity="0.68"/>
+                <path d="M126 170 C122 161 113 159 103 164 C112 169 122 172 126 170 Z" fill="#d42020" opacity="0.30"/>
+
+                <!-- nudo central -->
+                <ellipse cx="100" cy="170" rx="13" ry="11" fill="#aa1414"/>
+                <ellipse cx="100" cy="170" rx="7.5" ry="6"  fill="#7a0e0e"/>
+                <line x1="100" y1="163" x2="100" y2="177"
+                      stroke="#560808" stroke-width="1.8" opacity="0.52"/>
+
+            </svg>
+        </div>
+        <div style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
+            <p style="font-size:.88rem;font-weight:800;color:#1a1a2e;opacity:.28;letter-spacing:.15em;text-transform:uppercase;margin:0">No hay notas aún</p>
+            <p style="font-size:.72rem;color:#00808a;opacity:.55;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:0">
+                Presiona <strong style="display:inline-flex;align-items:center;justify-content:center;background:#00808a;color:white;width:18px;height:18px;border-radius:5px;font-size:.6rem;vertical-align:middle">+</strong> para comenzar
+            </p>
+        </div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER
+════════════════════════════════════════════════════════════════ */
+function render() {
+    const folderList = document.getElementById('folder-list');
+    folderList.innerHTML = ['Todas', ...folders].map(f => `
+        <div onclick="currentFolder='${f}'; render()" class="folder-pill px-6 py-2.5 rounded-full text-[11px] font-black uppercase bg-white text-slate-500 shadow-sm ${currentFolder === f ? 'active' : ''}">
+            ${f}${(f !== 'Todas' && f !== 'General') ? `<span onclick="deleteFolder('${f}', event)" class="delete-folder-btn ml-1">✕</span>` : ''}
+        </div>`).join('');
+
+    const grid   = document.getElementById('notes-grid');
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const filtered = notes.filter(n =>
+        (n.title.toLowerCase().includes(search) || n.content.toString().toLowerCase().includes(search)) &&
+        (currentFolder === 'Todas' || n.folder === currentFolder)
+    );
+
+    if (filtered.length === 0) {
+        grid.innerHTML = jijiEmptySVG();
+    } else {
+        grid.innerHTML = filtered.map(n => `
+            <div class="card-note ${n.color} p-10 cursor-pointer group ${darkColors.includes(n.color) ? 'text-white' : 'text-[#0a2540]'}" onclick="openEditor(${n.id})">
+                <button onclick="deleteNote(${n.id}, event)" class="delete-btn shadow-md">✕</button>
+                <div class="flex items-center gap-2 mb-6">
+                    <span class="text-[9px] font-black text-white bg-[#0a2540] px-3 py-1.5 rounded-lg uppercase">${n.folder}</span>
+                    <span class="text-[9px] font-black opacity-40 uppercase">${n.type.replace('html-canvas','CANVAS')}</span>
+                </div>
+                <h3 class="text-xl font-black uppercase leading-tight h-14 line-clamp-2 !text-left">${n.title || 'SIN TÍTULO'}</h3>
+                <div class="mt-8 border-t pt-6 border-black/5 flex justify-end">
+                    <div class="bg-[#00808a] text-white px-8 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg">Abrir</div>
+                </div>
+            </div>`).join('');
+    }
+
+    // Mobile panels
+    const mfl = document.getElementById('mobile-folder-list');
+    if (mfl) {
+        mfl.innerHTML = ['Todas', ...folders].map(f => `
+            <div onclick="currentFolder='${f}'; render(); mobileTab('notes')" class="folder-pill px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase bg-white text-slate-500 shadow-sm ${currentFolder === f ? 'active' : ''}">
+                ${f}${(f !== 'Todas' && f !== 'General') ? `<span onclick="deleteFolder('${f}', event)" class="delete-folder-btn ml-1">✕</span>` : ''}
+            </div>`).join('');
+    }
+    const msf = document.getElementById('mob-settings-folder'); if (msf) msf.textContent = currentFolder;
+    const msc = document.getElementById('mob-settings-count');  if (msc) msc.textContent = notes.length;
+    const msr = document.getElementById('mobile-search-results');
+    const msi = document.getElementById('mobile-search-input');
+    if (msr && msi && msi.value) msr.textContent = `${filtered.length} resultado${filtered.length !== 1 ? 's' : ''} encontrado${filtered.length !== 1 ? 's' : ''}`;
+    else if (msr) msr.textContent = '';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MOBILE TAB NAV (idéntico al original)
+════════════════════════════════════════════════════════════════ */
+const MOB_TABS = ['notes','folders','search','settings'];
+
+function mobileTab(tab) {
+    if (window.innerWidth >= 768) return;
+    MOB_TABS.forEach(t => {
+        const btn = document.getElementById('mnav-' + t);
+        if (btn) btn.classList.remove('mnav-active');
+        const panel = document.getElementById('mobile-panel-' + t);
+        if (panel) panel.style.display = 'none';
+    });
+    document.getElementById('mnav-' + tab)?.classList.add('mnav-active');
+    const mainContent = document.querySelector('main');
+    if (tab === 'notes') {
+        if (mainContent) mainContent.style.display = '';
+        document.getElementById('mobile-fab').style.display = 'flex';
+    } else {
+        if (mainContent) mainContent.style.display = 'none';
+        document.getElementById('mobile-fab').style.display = 'none';
+        const panel = document.getElementById('mobile-panel-' + tab);
+        if (panel) panel.style.display = 'flex';
+        if (tab === 'search') setTimeout(() => document.getElementById('mobile-search-input')?.focus(), 100);
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ARRANQUE
+════════════════════════════════════════════════════════════════ */
+initSupabase();       /* Inicia Supabase y detecta sesión existente */
+showWelcomeOverlay(); /* Muestra bienvenida si no hay sesión ni skip */
+render();             /* Renderiza estado inicial desde LocalStorage */
+
+/* Capturar el range ANTES de que el input[type=color] robe el foco */
+['txt-color-btn','txt-color-wrap'].forEach(id => {
+    document.getElementById(id)?.addEventListener('mousedown', saveSelectionForColor);
+});
+</script>
+
+</div><!-- /app-root -->
+</body>
+</html>
