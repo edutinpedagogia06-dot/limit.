@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://limit-notes.vercel.app/sitemap.xml

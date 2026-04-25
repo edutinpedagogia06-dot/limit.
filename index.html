@@ -3,12 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIMIT</title>
+
+    <!-- SEO Básico -->
+    <title>LIMIT – Notas, Tablas y Código en línea | App gratuita</title>
+    <meta name="description" content="LIMIT es tu espacio gratuito para crear notas, tablas y código en línea. Organiza tus ideas con carpetas, sincroniza con Google y descarga en PDF, HTML o Markdown.">
+    <meta name="keywords" content="notas en línea, app de notas gratis, notas y tablas, editor de código online, organizar notas, LIMIT notas, bloc de notas online, notas con Google, crear notas, notas online gratis">
+    <meta name="author" content="LIMIT">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://limit-notes.vercel.app/">
+
+    <!-- Open Graph (Facebook, WhatsApp, LinkedIn) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="LIMIT – Notas, Tablas y Código en línea">
+    <meta property="og:description" content="Tu espacio gratuito para crear notas, tablas y código. Sincroniza con Google y descarga en PDF, HTML o Markdown.">
+    <meta property="og:url" content="https://limit-notes.vercel.app/">
+    <meta property="og:image" content="https://limit-notes.vercel.app/logo-limit.png">
+    <meta property="og:site_name" content="LIMIT">
+    <meta property="og:locale" content="es_ES">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="LIMIT – Notas, Tablas y Código en línea">
+    <meta name="twitter:description" content="Tu espacio gratuito para crear notas, tablas y código. Sincroniza con Google.">
+    <meta name="twitter:image" content="https://limit-notes.vercel.app/logo-limit.png">
 
     <!-- Favicon -->
-    <link rel="icon"             type="image/png" href="logo-limit.png">
-    <link rel="apple-touch-icon"                  href="logo-limit.png">
-    <meta name="theme-color"     content="#00808a">
+    <link rel="icon" type="image/png" href="logo-limit.png">
+    <link rel="apple-touch-icon" href="logo-limit.png">
+    <meta name="theme-color" content="#00808a">
+
+    <!-- Datos estructurados (Schema.org) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "LIMIT",
+        "url": "https://limit-notes.vercel.app/",
+        "description": "App gratuita para crear notas, tablas y código en línea con sincronización Google.",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Web",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
 
     <!-- ① Supabase v2 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
